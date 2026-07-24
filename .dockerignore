@@ -1,0 +1,10 @@
+.git/
+node_modules/
+**/node_modules/
+frontend/dist/
+coverage/
+data/
+backups/
+.env
+*.log
+

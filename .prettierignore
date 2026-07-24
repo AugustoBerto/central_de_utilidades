@@ -1,0 +1,9 @@
+node_modules/
+dist/
+coverage/
+data/
+backups/
+package-lock.json
+FINAL.MD
+AGENTS.md
+

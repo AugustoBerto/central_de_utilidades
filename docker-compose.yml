@@ -1,0 +1,52 @@
+services:
+  backend:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+    env_file: ${ENV_FILE:-.env}
+    environment:
+      DATABASE_PATH: /data/app.sqlite
+      FILES_DIR: /files
+      TEMP_UPLOAD_DIR: /files/.tmp
+      PORT: 3000
+      SYSTEM_METRICS_MODE: container
+    volumes:
+      - panel_db:/data
+      - panel_files:/files
+    restart: unless-stopped
+    healthcheck:
+      test:
+        [
+          'CMD',
+          'node',
+          '-e',
+          "fetch('http://127.0.0.1:3000/api/health').then(r => process.exit(r.ok ? 0 : 1)).catch(() => process.exit(1))"
+        ]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+    networks: [internal]
+
+  nginx:
+    build:
+      context: .
+      dockerfile: nginx/Dockerfile
+    depends_on:
+      backend:
+        condition: service_healthy
+    ports:
+      - '80:80'
+    restart: unless-stopped
+    networks: [edge, internal]
+
+networks:
+  edge:
+    driver: bridge
+  internal:
+    driver: bridge
+    internal: true
+
+volumes:
+  panel_db:
+  panel_files:
