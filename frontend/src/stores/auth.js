@@ -7,6 +7,7 @@ export const useAuthStore = defineStore('auth', {
     user: null,
     csrfToken: null,
     setupRequired: null,
+    automationsEnabled: false,
     restored: false,
     error: null
   }),
@@ -21,6 +22,7 @@ export const useAuthStore = defineStore('auth', {
         if (!setup.setupRequired) {
           const session = await api('/api/auth/me');
           this.user = session.user;
+          this.automationsEnabled = Boolean(session.features?.automationsEnabled);
           this.csrfToken = (await api('/api/auth/csrf')).csrfToken;
         }
       } catch (error) {
@@ -28,6 +30,7 @@ export const useAuthStore = defineStore('auth', {
           this.error = error.message;
         this.user = null;
         this.csrfToken = null;
+        this.automationsEnabled = false;
       } finally {
         this.restored = true;
       }
@@ -44,6 +47,7 @@ export const useAuthStore = defineStore('auth', {
       const result = await api('/api/auth/login', { method: 'POST', body: payload });
       this.user = result.user;
       this.csrfToken = result.csrfToken;
+      this.automationsEnabled = Boolean(result.features?.automationsEnabled);
       this.setupRequired = false;
     },
     async logout() {
@@ -54,6 +58,7 @@ export const useAuthStore = defineStore('auth', {
         });
       this.user = null;
       this.csrfToken = null;
+      this.automationsEnabled = false;
     },
     async getSessions() {
       return (await api('/api/auth/sessions')).sessions;

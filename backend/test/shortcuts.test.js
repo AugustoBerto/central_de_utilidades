@@ -122,6 +122,11 @@ describe('atalhos', () => {
       'Painel',
       'Docs'
     ]);
+    const pinned = await request(app)
+      .get('/api/shortcuts/pinned')
+      .set('Cookie', session.cookie);
+    expect(pinned.status).toBe(200);
+    expect(pinned.body.shortcuts.map((shortcut) => shortcut.label)).toEqual(['Docs']);
     expect(
       (
         await request(app)

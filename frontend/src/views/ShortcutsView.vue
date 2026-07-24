@@ -108,6 +108,7 @@ async function save() {
     notice.value = editingId.value ? 'Atalho atualizado.' : 'Atalho criado.';
     resetForm();
     await load();
+    window.dispatchEvent(new Event('shortcuts:changed'));
   } catch (caught) {
     error.value = caught.message;
     fieldErrors.value = caught.fields ?? {};
@@ -130,6 +131,7 @@ async function move(shortcut, direction) {
       body: { position: target }
     });
     await load();
+    window.dispatchEvent(new Event('shortcuts:changed'));
   } catch (caught) {
     error.value = caught.message;
   }
@@ -145,6 +147,7 @@ async function remove(shortcut) {
     notice.value = 'Atalho excluído.';
     if (editingId.value === shortcut.id) resetForm();
     await load();
+    window.dispatchEvent(new Event('shortcuts:changed'));
   } catch (caught) {
     error.value = caught.message;
   }
@@ -155,8 +158,8 @@ onMounted(load);
 
 <template>
   <AppShell>
-    <section class="grid gap-6 xl:grid-cols-[minmax(0,1fr)_22rem]">
-      <div class="space-y-6">
+    <section class="grid min-w-0 grid-cols-1 gap-6 xl:grid-cols-[minmax(0,1fr)_22rem]">
+      <div class="min-w-0 space-y-6">
         <div class="flex items-center justify-between">
           <div>
             <h2 class="font-semibold">Acessos frequentes</h2>
@@ -211,17 +214,17 @@ onMounted(load);
                   />
                   <div class="min-w-0 flex-1">
                     <div class="flex items-center gap-2">
-                      <h4 class="truncate font-medium">{{ shortcut.label }}</h4>
+                      <h4 class="break-words font-medium">{{ shortcut.label }}</h4>
                       <span
                         v-if="shortcut.isPinned"
                         class="rounded bg-accent/15 px-1.5 py-0.5 text-xs text-accent"
                         >Fixado</span
                       >
                     </div>
-                    <p class="mt-1 truncate text-xs text-muted">{{ shortcut.url }}</p>
+                    <p class="mt-1 break-all text-xs text-muted">{{ shortcut.url }}</p>
                   </div>
                 </div>
-                <div class="mt-4 flex flex-wrap gap-2">
+                <div class="mt-4 flex flex-wrap items-center gap-2">
                   <a
                     :href="shortcut.url"
                     target="_blank"
@@ -257,7 +260,7 @@ onMounted(load);
           </section>
         </template>
       </div>
-      <aside class="h-fit rounded-lg border border-border bg-surface p-5">
+      <aside class="order-first h-fit min-w-0 w-full rounded-lg border border-border bg-surface p-5 xl:order-none">
         <h2 class="font-semibold">{{ editingId ? 'Editar atalho' : 'Novo atalho' }}</h2>
         <form class="mt-5 space-y-4" @submit.prevent="save">
           <label class="block text-sm"

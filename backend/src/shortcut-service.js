@@ -102,6 +102,15 @@ export class ShortcutService {
       .map(toShortcut);
   }
 
+  pinned(limit = 3) {
+    return this.database
+      .prepare(
+        'SELECT * FROM shortcuts WHERE is_pinned = 1 ORDER BY position, updated_at DESC, id DESC LIMIT ?'
+      )
+      .all(Math.min(Math.max(Number(limit) || 3, 1), 3))
+      .map(toShortcut);
+  }
+
   get(id) {
     const shortcut = toShortcut(
       this.database.prepare('SELECT * FROM shortcuts WHERE id = ?').get(id)

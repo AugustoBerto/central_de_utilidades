@@ -92,6 +92,8 @@ const router = createRouter({
 router.beforeEach(async (to) => {
   const auth = useAuthStore();
   await auth.restore();
+  if (to.name === 'automations' && !auth.automationsEnabled)
+    return { name: 'dashboard', query: { notice: 'automations-disabled' } };
   if (to.meta.requiresAuth && !auth.authenticated)
     return { name: 'login', query: { reason: 'session' } };
   if (to.name === 'login' && auth.authenticated) return { name: 'dashboard' };

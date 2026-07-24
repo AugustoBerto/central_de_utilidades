@@ -1,19 +1,27 @@
 <script setup>
 import {
   Activity,
+  BookOpen,
   BookOpenText,
+  Folder,
   FolderOpen,
   Gauge,
+  Globe,
+  Link as LinkIcon,
   Menu,
+  Server,
   Settings,
+  Shield,
+  Terminal,
   TerminalSquare,
   X,
   Zap
 } from 'lucide-vue-next';
-import { computed } from 'vue';
+import { computed, onBeforeUnmount, onMounted, ref } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 
 import AppButton from '@/components/base/AppButton.vue';
+import { api } from '@/services/api';
 import { useAuthStore } from '@/stores/auth';
 import { useUiStore } from '@/stores/ui';
 
@@ -23,13 +31,26 @@ const auth = useAuthStore();
 const ui = useUiStore();
 const title = computed(() => route.meta.title ?? 'Painel de Utilidades');
 const description = computed(() => route.meta.description ?? '');
-const items = [
+const pinnedShortcuts = ref([]);
+const shortcutIcons = {
+  'book-open': BookOpen,
+  folder: Folder,
+  globe: Globe,
+  link: LinkIcon,
+  server: Server,
+  shield: Shield,
+  terminal: Terminal,
+  zap: Zap
+};
+const items = computed(() => [
   { label: 'Visão geral', to: '/dashboard', icon: Gauge },
   { label: 'Notas rápidas', to: '/notes', icon: BookOpenText },
   { label: 'Drive pessoal', to: '/drive', icon: FolderOpen },
   { label: 'Atalhos', to: '/shortcuts', icon: Zap },
-  { label: 'Automações', to: '/automations', icon: TerminalSquare }
-];
+  ...(auth.automationsEnabled
+    ? [{ label: 'Automações', to: '/automations', icon: TerminalSquare }]
+    : [])
+]);
 
 function closeMobileNavigation() {
   ui.closeMobileNavigation();
@@ -39,10 +60,25 @@ async function logout() {
   await auth.logout();
   await router.replace({ name: 'login' });
 }
+
+async function loadPinnedShortcuts() {
+  if (!auth.authenticated) return;
+  try {
+    pinnedShortcuts.value = (await api('/api/shortcuts/pinned')).shortcuts;
+  } catch {
+    pinnedShortcuts.value = [];
+  }
+}
+
+onMounted(() => {
+  loadPinnedShortcuts();
+  window.addEventListener('shortcuts:changed', loadPinnedShortcuts);
+});
+onBeforeUnmount(() => window.removeEventListener('shortcuts:changed', loadPinnedShortcuts));
 </script>
 
 <template>
-  <div class="min-h-screen bg-canvas text-foreground">
+  <div class="min-h-screen overflow-x-hidden bg-canvas text-foreground">
     <button
       v-if="ui.mobileNavigationOpen"
       class="fixed inset-0 z-30 bg-black/60 lg:hidden"
@@ -105,13 +141,13 @@ async function logout() {
     </aside>
 
     <div
-      class="min-h-screen transition-[padding] lg:pl-72"
+      class="min-h-screen min-w-0 transition-[padding] lg:pl-72"
       :class="{ 'lg:pl-20': ui.sidebarCollapsed }"
     >
       <header
-        class="sticky top-0 z-20 flex min-h-16 items-center justify-between border-b border-border bg-canvas/95 px-4 backdrop-blur sm:px-6"
+        class="sticky top-0 z-20 flex min-h-16 items-center justify-between gap-2 overflow-hidden border-b border-border bg-canvas/95 px-4 backdrop-blur sm:px-6"
       >
-        <div class="flex min-w-0 items-center gap-3">
+        <div class="flex min-w-0 flex-1 items-center gap-3">
           <button
             class="rounded-md p-2 text-muted hover:bg-elevated hover:text-foreground lg:hidden"
             type="button"
@@ -127,14 +163,32 @@ async function logout() {
             </p>
           </div>
         </div>
-        <div class="flex items-center gap-3">
+        <nav
+          v-if="pinnedShortcuts.length"
+          class="hidden min-w-0 flex-1 items-center justify-center gap-1 px-4 md:flex"
+          aria-label="Atalhos fixados"
+        >
+          <a
+            v-for="shortcut in pinnedShortcuts"
+            :key="shortcut.id"
+            :href="shortcut.url"
+            target="_blank"
+            rel="noopener noreferrer"
+            :title="shortcut.label"
+            class="inline-flex min-h-10 max-w-40 items-center gap-2 rounded-md px-3 text-sm text-muted hover:bg-elevated hover:text-foreground focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+          >
+            <component :is="shortcutIcons[shortcut.iconKey]" :size="17" aria-hidden="true" />
+            <span class="truncate">{{ shortcut.label }}</span>
+          </a>
+        </nav>
+        <div class="flex shrink-0 items-center gap-3">
           <span class="hidden text-sm text-muted sm:inline">{{
             auth.user?.username
           }}</span>
           <AppButton variant="secondary" @click="logout">Sair</AppButton>
         </div>
       </header>
-      <main class="mx-auto w-full max-w-7xl px-4 py-6 sm:px-6 lg:px-8">
+      <main class="mx-auto w-full min-w-0 max-w-7xl px-4 py-6 sm:px-6 lg:px-8">
         <slot />
       </main>
     </div>

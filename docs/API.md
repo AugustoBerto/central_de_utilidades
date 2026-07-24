@@ -104,6 +104,8 @@ nome original não participa do caminho físico.
 ### Atalhos
 
 - `GET /api/shortcuts` lista atalhos por grupo e posição;
+- `GET /api/shortcuts/pinned` retorna no máximo três atalhos fixados para a
+  barra superior;
 - `POST /api/shortcuts`, `PATCH /api/shortcuts/:shortcutId` e
   `DELETE /api/shortcuts/:shortcutId` gerenciam os atalhos;
 - `PATCH` aceita `position` para reordenar de forma persistente.

@@ -151,7 +151,11 @@ export function createApp({
         sessionCookie(response, result.session);
         response
           .status(200)
-          .json({ user: result.user, csrfToken: result.session.csrfToken });
+          .json({
+            user: result.user,
+            csrfToken: result.session.csrfToken,
+            features: { automationsEnabled: config.automationsEnabled }
+          });
       } catch (error) {
         next(error);
       }
@@ -159,7 +163,10 @@ export function createApp({
   );
   app.get('/api/auth/me', requireAuth, (request, response) => {
     refreshRotatedCookie(request, response);
-    response.json({ user: request.auth.user });
+    response.json({
+      user: request.auth.user,
+      features: { automationsEnabled: config.automationsEnabled }
+    });
   });
   app.get('/api/system/metrics', requireAuth, (request, response) => {
     refreshRotatedCookie(request, response);
@@ -197,6 +204,13 @@ export function createApp({
   app.get('/api/shortcuts', requireAuth, (_request, response, next) => {
     try {
       response.json({ shortcuts: shortcutService.list() });
+    } catch (error) {
+      next(error);
+    }
+  });
+  app.get('/api/shortcuts/pinned', requireAuth, (_request, response, next) => {
+    try {
+      response.json({ shortcuts: shortcutService.pinned(3) });
     } catch (error) {
       next(error);
     }
