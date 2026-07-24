@@ -1,4 +1,4 @@
-FROM node:22-bookworm-slim AS dependencies
+FROM node:22-trixie-slim AS dependencies
 WORKDIR /app
 RUN apt-get update \
   && apt-get install -y --no-install-recommends python3 make g++ \
@@ -8,7 +8,7 @@ COPY backend/package.json backend/package.json
 COPY frontend/package.json frontend/package.json
 RUN npm ci --omit=dev --workspace @painel/backend
 
-FROM node:22-bookworm-slim
+FROM node:22-trixie-slim
 WORKDIR /app
 ENV NODE_ENV=production
 RUN apt-get update \
