@@ -345,7 +345,8 @@ retorno seguro à última rota válida.
 
 #### Interação
 
-- primeira versão usa polling configurável, pausado quando a aba fica oculta;
+- backend coleta e persiste amostras em intervalo configurável, independente da
+  tela; o polling visual é pausado quando a aba fica oculta;
 - botão de atualização manual informa a hora da leitura concluída;
 - falha parcial preserva o último valor válido, identifica-o como desatualizado
   e tenta novamente com backoff;
@@ -355,8 +356,9 @@ retorno seguro à última rota válida.
 #### Contrato
 
 `GET /api/system/metrics` deverá retornar envelope versionável com `source`,
-`collectedAt`, unidades e métricas disponíveis. Dados ausentes devem ser `null`
-ou omitidos conforme contrato, nunca simulados como zero.
+`collectedAt`, unidades, leitura atual e série histórica por intervalo. Dados
+ausentes devem ser `null` ou omitidos conforme contrato, nunca simulados como
+zero. A retenção de amostras deve ser limitada e documentada.
 
 SSE poderá ser introduzido em `/api/system/metrics/stream` após validação de
 proxy, reconexão, limites de conexão e ganho real de experiência. Se o backend

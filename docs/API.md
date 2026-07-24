@@ -63,17 +63,20 @@ CSRF em memória.
 
 ### `GET /api/system/metrics`
 
-Exige sessão. Retorna um envelope versionado com `source`, `status`,
-`collectedAt` e métricas com unidades explícitas. `source.type` é `host`,
+Exige sessão. Aceita `range=1h|6h|24h` e retorna um envelope versionado com
+`source`, `status`, `collectedAt`, métricas com unidades explícitas, `history`
+persistido e `samplingIntervalSeconds`. `source.type` é `host`,
 `container` ou `disabled`; no Compose, o backend declara `container` para não
 atribuir métricas do host a uma origem que não controla. Campos sem coleta são
 `null`, nunca `0` artificial. A primeira amostra de CPU/rede pode estar
-incompleta porque ainda não há base de comparação.
+incompleta porque ainda não há base de comparação. As leituras são coletadas no
+backend a cada 5 segundos por padrão e retidas por 24 horas.
 
 ### Notas
 
-- `GET /api/notes?q=` lista notas por atualização, com busca parametrizada em
-  título e conteúdo;
+- `GET /api/notes?q=&sort=&from=&to=` lista notas por atualização, criação ou
+  título; a busca é parametrizada em título/conteúdo e o período usa a data de
+  atualização inclusiva;
 - `GET /api/notes/:noteId` retorna uma nota;
 - `POST /api/notes` cria uma nota com `title` opcional e `content` obrigatório;
 - `PATCH /api/notes/:noteId` exige `updatedAt` da versão aberta. Se a nota foi

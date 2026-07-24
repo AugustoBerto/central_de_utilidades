@@ -93,6 +93,12 @@ describe('notas', () => {
       .set('Cookie', session.cookie);
     expect(listed.body.notes).toHaveLength(1);
 
+    const alphabetic = await request(app)
+      .get('/api/notes?sort=title:asc&from=2000-01-01&to=2100-01-01')
+      .set('Cookie', session.cookie);
+    expect(alphabetic.status).toBe(200);
+    expect(alphabetic.body.notes[0].id).toBe(created.body.note.id);
+
     const updated = await request(app)
       .patch(`/api/notes/${created.body.note.id}`)
       .set(headers)

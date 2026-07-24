@@ -13,9 +13,13 @@ import { SystemMetricsService } from './system-metrics-service.js';
 const config = loadConfig();
 const database = openDatabase(config.databasePath);
 const systemMetricsService = new SystemMetricsService({
+  database,
   mode: config.systemMetricsMode,
-  filesDir: config.filesDir
+  filesDir: config.filesDir,
+  sampleIntervalSeconds: config.metricsSampleIntervalSeconds,
+  retentionHours: config.metricsRetentionHours
 });
+systemMetricsService.start();
 const app = createApp({
   authService: new AuthService(database, config),
   automationService: new AutomationService(database, {

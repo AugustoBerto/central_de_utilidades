@@ -48,15 +48,36 @@ export class NoteService {
     this.database = database;
   }
 
-  list(query = '') {
+  list({ query = '', sort = 'updatedAt:desc', from, to } = {}) {
     const search = String(query).trim();
-    const rows = search
-      ? this.database
-          .prepare(
-            "SELECT * FROM notes WHERE title LIKE ? ESCAPE '\\' OR content LIKE ? ESCAPE '\\' ORDER BY updated_at DESC"
-          )
-          .all(...Array(2).fill(`%${search.replace(/[\\%_]/g, '\\$&')}%`))
-      : this.database.prepare('SELECT * FROM notes ORDER BY updated_at DESC').all();
+    const orders = {
+      'updatedAt:desc': 'updated_at DESC',
+      'updatedAt:asc': 'updated_at ASC',
+      'createdAt:desc': 'created_at DESC',
+      'title:asc': 'title COLLATE NOCASE ASC, updated_at DESC',
+      'title:desc': 'title COLLATE NOCASE DESC, updated_at DESC'
+    };
+    const filters = [];
+    const values = [];
+    if (search) {
+      filters.push("(title LIKE ? ESCAPE '\\' OR content LIKE ? ESCAPE '\\')");
+      values.push(...Array(2).fill(`%${search.replace(/[\\%_]/g, '\\$&')}%`));
+    }
+    if (/^\d{4}-\d{2}-\d{2}$/.test(from ?? '')) {
+      filters.push('updated_at >= ?');
+      values.push(`${from}T00:00:00.000Z`);
+    }
+    if (/^\d{4}-\d{2}-\d{2}$/.test(to ?? '')) {
+      const end = new Date(`${to}T00:00:00.000Z`);
+      end.setUTCDate(end.getUTCDate() + 1);
+      filters.push('updated_at < ?');
+      values.push(end.toISOString());
+    }
+    const where = filters.length ? `WHERE ${filters.join(' AND ')}` : '';
+    const order = orders[sort] ?? orders['updatedAt:desc'];
+    const rows = this.database
+      .prepare(`SELECT * FROM notes ${where} ORDER BY ${order}`)
+      .all(...values);
     return rows.map(toNote);
   }
 

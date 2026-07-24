@@ -5,6 +5,7 @@ import { join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
 
 import { SystemMetricsService } from '../src/system-metrics-service.js';
+import { openDatabase } from '../src/database.js';
 
 const directories = [];
 
@@ -33,5 +34,22 @@ describe('SystemMetricsService', () => {
       second.metrics.network === null ||
         second.metrics.network.receivedBytesPerSecond >= 0
     ).toBe(true);
+  });
+
+  it('persiste amostras e fornece histórico por intervalo', () => {
+    const directory = mkdtempSync(join(tmpdir(), 'painel-metrics-history-'));
+    directories.push(directory);
+    const service = new SystemMetricsService({
+      database: openDatabase(join(directory, 'app.sqlite')),
+      mode: 'local',
+      filesDir: directory
+    });
+    service.sample();
+    service.sample();
+
+    const snapshot = service.snapshot('1h');
+    expect(snapshot.history).toHaveLength(2);
+    expect(snapshot.samplingIntervalSeconds).toBe(5);
+    expect(snapshot.collectedAt).toBe(snapshot.history[1].collectedAt);
   });
 });

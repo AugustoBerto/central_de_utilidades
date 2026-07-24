@@ -163,11 +163,18 @@ export function createApp({
   });
   app.get('/api/system/metrics', requireAuth, (request, response) => {
     refreshRotatedCookie(request, response);
-    response.json(systemMetricsService.collect());
+    response.json(systemMetricsService.snapshot(request.query.range));
   });
   app.get('/api/notes', requireAuth, (request, response, next) => {
     try {
-      response.json({ notes: noteService.list(request.query.q) });
+      response.json({
+        notes: noteService.list({
+          query: request.query.q,
+          sort: request.query.sort,
+          from: request.query.from,
+          to: request.query.to
+        })
+      });
     } catch (error) {
       next(error);
     }

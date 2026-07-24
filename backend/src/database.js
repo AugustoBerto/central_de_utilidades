@@ -88,6 +88,13 @@ export function openDatabase(path) {
       duration_ms INTEGER,
       created_at TEXT NOT NULL
     );
+    CREATE TABLE IF NOT EXISTS metric_samples (
+      id INTEGER PRIMARY KEY,
+      collected_at TEXT NOT NULL,
+      source_type TEXT NOT NULL,
+      status TEXT NOT NULL,
+      metrics_json TEXT NOT NULL
+    );
     CREATE INDEX IF NOT EXISTS sessions_token_hash_idx ON sessions(token_hash);
     CREATE INDEX IF NOT EXISTS sessions_user_id_idx ON sessions(user_id);
     CREATE INDEX IF NOT EXISTS session_token_history_token_hash_idx ON session_token_history(token_hash);
@@ -96,6 +103,7 @@ export function openDatabase(path) {
     CREATE INDEX IF NOT EXISTS files_updated_at_idx ON files(updated_at DESC);
     CREATE INDEX IF NOT EXISTS shortcuts_group_position_idx ON shortcuts(group_name, position);
     CREATE INDEX IF NOT EXISTS automation_runs_automation_idx ON automation_runs(automation_id, created_at DESC);
+    CREATE INDEX IF NOT EXISTS metric_samples_collected_at_idx ON metric_samples(collected_at DESC);
   `);
 
   return database;

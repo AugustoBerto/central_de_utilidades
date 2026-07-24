@@ -29,6 +29,7 @@ const loading = ref(true);
 const error = ref('');
 const dragging = ref(false);
 let searchTimer;
+let uploadSequence = 0;
 
 function iconFor(file) {
   return file.mimeType.startsWith('image/') ? Image : FileText;
@@ -52,7 +53,15 @@ async function load() {
 }
 
 function upload(file) {
-  const item = { file, progress: 0, status: 'enviando', error: '', xhr: null };
+  const item = {
+    id: ++uploadSequence,
+    file,
+    progress: 0,
+    status: 'enviando',
+    error: '',
+    xhr: null,
+    dismissTimer: null
+  };
   queue.value.push(item);
   if (file.size > MAX_UPLOAD_BYTES) {
     item.status = 'erro';
@@ -75,6 +84,9 @@ function upload(file) {
       item.status = 'concluído';
       item.progress = 100;
       await load();
+      item.dismissTimer = window.setTimeout(() => {
+        queue.value = queue.value.filter((candidate) => candidate.id !== item.id);
+      }, 3000);
       return;
     }
     item.status = 'erro';
@@ -109,7 +121,8 @@ function cancel(item) {
 }
 
 function retry(item) {
-  queue.value = queue.value.filter((candidate) => candidate !== item);
+  window.clearTimeout(item.dismissTimer);
+  queue.value = queue.value.filter((candidate) => candidate.id !== item.id);
   upload(item.file);
 }
 
@@ -143,6 +156,7 @@ watch(page, load);
 onMounted(load);
 onBeforeUnmount(() => {
   window.clearTimeout(searchTimer);
+  queue.value.forEach((item) => window.clearTimeout(item.dismissTimer));
   queue.value.filter((item) => item.status === 'enviando').forEach(cancel);
 });
 </script>
@@ -182,7 +196,7 @@ onBeforeUnmount(() => {
         <ul class="mt-3 divide-y divide-border">
           <li
             v-for="item in queue"
-            :key="`${item.file.name}-${item.file.lastModified}-${item.status}`"
+            :key="item.id"
             class="flex items-center gap-3 py-3"
           >
             <FileText class="shrink-0 text-muted" :size="18" />

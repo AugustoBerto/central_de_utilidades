@@ -134,15 +134,9 @@ async function logout() {
           <AppButton variant="secondary" @click="logout">Sair</AppButton>
         </div>
       </header>
-      <main class="mx-auto w-full max-w-7xl px-4 py-6 sm:px-6 lg:px-8"><slot /></main>
-      <footer
-        class="border-t border-border px-4 py-3 text-xs text-muted sm:px-6 lg:px-8"
-      >
-        <span class="inline-flex items-center gap-2"
-          ><span class="size-2 rounded-full bg-green-400" aria-hidden="true" />Sessão
-          autenticada — monitoramento disponível no dashboard.</span
-        >
-      </footer>
+      <main class="mx-auto w-full max-w-7xl px-4 py-6 sm:px-6 lg:px-8">
+        <slot />
+      </main>
     </div>
   </div>
 </template>

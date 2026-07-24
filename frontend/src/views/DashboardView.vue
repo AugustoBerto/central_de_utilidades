@@ -8,7 +8,7 @@ import {
   Server,
   Timer
 } from 'lucide-vue-next';
-import { computed, onBeforeUnmount, onMounted, ref, shallowRef } from 'vue';
+import { computed, onBeforeUnmount, onMounted, ref, shallowRef, watch } from 'vue';
 
 import AppButton from '@/components/base/AppButton.vue';
 import AppShell from '@/components/layout/AppShell.vue';
@@ -18,6 +18,7 @@ import { api } from '@/services/api';
 const POLL_INTERVAL_MS = 15_000;
 const metrics = ref(null);
 const history = ref([]);
+const range = ref('1h');
 const loading = ref(true);
 const refreshing = ref(false);
 const error = ref('');
@@ -49,13 +50,16 @@ const sourceLabel = computed(() => {
   };
   return labels[metrics.value?.source?.type] ?? 'indisponível';
 });
+function formatChartTime(sample) {
+  return new Intl.DateTimeFormat('pt-BR', {
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+    hourCycle: 'h23'
+  }).format(new Date(sample.collectedAt));
+}
 const chartData = computed(() => ({
-  labels: history.value.map((sample) =>
-    new Date(sample.collectedAt).toLocaleTimeString('pt-BR', {
-      minute: '2-digit',
-      second: '2-digit'
-    })
-  ),
+  labels: history.value.map(formatChartTime),
   datasets: [
     {
       label: 'CPU (%)',
@@ -81,7 +85,28 @@ const chartOptions = {
   responsive: true,
   maintainAspectRatio: false,
   animation: false,
-  plugins: { legend: { labels: { color: '#8b949e' } } },
+  plugins: {
+    legend: { labels: { color: '#8b949e' } },
+    tooltip: {
+      callbacks: {
+        title(items) {
+          const sample = history.value[items[0]?.dataIndex];
+          return sample
+            ? new Intl.DateTimeFormat('pt-BR', {
+                year: 'numeric',
+                month: 'short',
+                day: '2-digit',
+                hour: '2-digit',
+                minute: '2-digit',
+                second: '2-digit',
+                hourCycle: 'h23',
+                timeZoneName: 'short'
+              }).format(new Date(sample.collectedAt))
+            : '';
+        }
+      }
+    }
+  },
   scales: {
     x: { ticks: { color: '#8b949e', maxTicksLimit: 6 }, grid: { color: '#21262d' } },
     y: {
@@ -108,11 +133,11 @@ async function refresh() {
   refreshing.value = true;
   error.value = '';
   try {
-    const next = await api('/api/system/metrics');
+    const next = await api(`/api/system/metrics?range=${range.value}`);
     metrics.value = next;
     stale.value = false;
     if (next.metrics) {
-      history.value = [...history.value, next].slice(-30);
+      history.value = next.history ?? [];
       await loadChart();
     }
   } catch (caught) {
@@ -139,6 +164,7 @@ onMounted(() => {
   schedule();
   document.addEventListener('visibilitychange', onVisibilityChange);
 });
+watch(range, refresh);
 onBeforeUnmount(() => {
   window.clearInterval(timer);
   document.removeEventListener('visibilitychange', onVisibilityChange);
@@ -260,11 +286,16 @@ onBeforeUnmount(() => {
           </article>
         </div>
         <section class="rounded-lg border border-border bg-surface p-5">
-          <h3 class="font-semibold">CPU e memória</h3>
-          <p class="mt-1 text-sm text-muted">
-            Últimas {{ history.length }} leituras. Valores ausentes permanecem como
-            lacunas.
-          </p>
+          <div class="flex flex-wrap items-start justify-between gap-3">
+            <div>
+              <h3 class="font-semibold">CPU e memória</h3>
+              <p class="mt-1 text-sm text-muted">
+                {{ history.length }} leituras no intervalo. Coleta a cada
+                {{ metrics.samplingIntervalSeconds ?? 5 }} s; lacunas não são simuladas.
+              </p>
+            </div>
+            <label class="text-sm"><span class="sr-only">Intervalo do gráfico</span><select v-model="range" class="min-h-10 rounded-md border border-border bg-canvas px-3"><option value="1h">Última hora</option><option value="6h">Últimas 6 horas</option><option value="24h">Últimas 24 horas</option></select></label>
+          </div>
           <div v-if="LineChart" class="mt-5 h-64">
             <component
               :is="LineChart"

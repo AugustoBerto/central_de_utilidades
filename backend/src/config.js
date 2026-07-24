@@ -31,6 +31,8 @@ export function loadConfig(environment = process.env) {
     sessionRotationHours: integer(environment.SESSION_ROTATION_HOURS, 24),
     cookieSecure: environment.COOKIE_SECURE === 'true',
     trustProxyHops: integer(environment.TRUST_PROXY_HOPS, 1),
-    systemMetricsMode: environment.SYSTEM_METRICS_MODE ?? 'local'
+    systemMetricsMode: environment.SYSTEM_METRICS_MODE ?? 'local',
+    metricsSampleIntervalSeconds: integer(environment.METRICS_SAMPLE_INTERVAL_SECONDS, 5),
+    metricsRetentionHours: integer(environment.METRICS_RETENTION_HOURS, 24)
   };
 }
