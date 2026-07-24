@@ -1,6 +1,6 @@
 # Painel de Utilidades Privado
 
-Painel operacional autohospedado, criado a partir do [plano mestre](FINAL.MD).
+Painel operacional autohospedado.
 O acesso é por `http://IP_DA_VPS` e pressupõe rede privada, VPN ou allowlist de
 IP no firewall.
 
