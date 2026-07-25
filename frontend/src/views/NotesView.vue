@@ -5,7 +5,6 @@ import {
   Clipboard,
   Code2,
   Download,
-  Eye,
   FilePlus2,
   FileText,
   FileUp,
@@ -18,7 +17,7 @@ import {
   Minus,
   Pencil,
   Quote,
-  Save,
+  Save as SaveIcon,
   Search,
   Strikethrough,
   Trash2,
@@ -296,7 +295,7 @@ onBeforeUnmount(() => { window.clearTimeout(searchTimer); window.clearTimeout(co
             </template>
             <template v-else>
               <AppButton variant="secondary" type="button" :disabled="saving" @click="closeModal">Cancelar</AppButton>
-              <AppButton :loading="saving" @click="save"><Save :size="16" />Salvar</AppButton>
+              <AppButton :loading="saving" @click="save"><SaveIcon :size="16" />Salvar</AppButton>
             </template>
           </div>
         </div>
