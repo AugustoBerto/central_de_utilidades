@@ -2,6 +2,7 @@ import { createApp } from 'vue';
 import { createPinia } from 'pinia';
 
 import App from './App.vue';
+import './composables/useTheme';
 import router from './router';
 import { setUnauthorizedHandler } from './services/api';
 import './styles.css';
