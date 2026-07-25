@@ -27,26 +27,16 @@ const theme = EditorView.theme({
     fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace',
     lineHeight: '1.65'
   },
-  '.cm-scroller': {
-    overflow: 'auto'
-  },
+  '.cm-scroller': { overflow: 'auto' },
   '.cm-gutters': {
     backgroundColor: '#161b22',
     color: '#6e7681',
     borderRight: '1px solid #30363d'
   },
-  '.cm-activeLine, .cm-activeLineGutter': {
-    backgroundColor: '#161b22'
-  },
-  '.cm-selectionBackground, ::selection': {
-    backgroundColor: '#264f78 !important'
-  },
-  '.cm-cursor, .cm-dropCursor': {
-    borderLeftColor: '#58a6ff'
-  },
-  '.cm-focused': {
-    outline: 'none'
-  }
+  '.cm-activeLine, .cm-activeLineGutter': { backgroundColor: '#161b22' },
+  '.cm-selectionBackground, ::selection': { backgroundColor: '#264f78 !important' },
+  '.cm-cursor, .cm-dropCursor': { borderLeftColor: '#58a6ff' },
+  '.cm-focused': { outline: 'none' }
 }, { dark: true });
 
 function currentSelection() {
@@ -60,7 +50,10 @@ function replaceSelection(before, after = before, placeholder = 'texto') {
   const insertion = `${before}${selectedText}${after}`;
   view.dispatch({
     changes: { from: selection.from, to: selection.to, insert: insertion },
-    selection: { anchor: selection.from + before.length, head: selection.from + before.length + selectedText.length }
+    selection: {
+      anchor: selection.from + before.length,
+      head: selection.from + before.length + selectedText.length
+    }
   });
   view.focus();
 }
@@ -83,6 +76,32 @@ function focus() {
   view?.focus();
 }
 
+function handleShortcut(event) {
+  if (!(event.ctrlKey || event.metaKey)) return false;
+  const key = event.key.toLowerCase();
+  if (key === 's') {
+    event.preventDefault();
+    emit('save');
+    return true;
+  }
+  if (key === 'b') {
+    event.preventDefault();
+    replaceSelection('**');
+    return true;
+  }
+  if (key === 'i') {
+    event.preventDefault();
+    replaceSelection('*');
+    return true;
+  }
+  if (key === 'k') {
+    event.preventDefault();
+    replaceSelection('[', '](https://)', 'texto do link');
+    return true;
+  }
+  return false;
+}
+
 onMounted(() => {
   view = new EditorView({
     parent: host.value,
@@ -93,16 +112,7 @@ onMounted(() => {
       theme,
       EditorView.lineWrapping,
       EditorView.contentAttributes.of({ 'aria-label': props.ariaLabel }),
-      EditorView.domEventHandlers({
-        keydown(event) {
-          if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 's') {
-            event.preventDefault();
-            emit('save');
-            return true;
-          }
-          return false;
-        }
-      }),
+      EditorView.domEventHandlers({ keydown: handleShortcut }),
       EditorView.updateListener.of((update) => {
         if (!update.docChanged || applyingExternalValue) return;
         emit('update:modelValue', update.state.doc.toString());
