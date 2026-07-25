@@ -2,7 +2,7 @@
 /* eslint-disable vue/no-v-html -- renderMarkdown escapa entrada e gera somente marcação limitada. */
 import {
   Bold,
-  Eye,
+  Download,
   FilePlus2,
   Grid2X2,
   Italic,
@@ -61,6 +61,33 @@ function formatDate(value) {
     dateStyle: 'medium',
     timeStyle: 'short'
   });
+}
+
+function safeFileName(value) {
+  const normalized = (value || 'nota')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[<>:"/\\|?*\u0000-\u001f]/g, '')
+    .trim()
+    .replace(/\s+/g, '-')
+    .replace(/-+/g, '-')
+    .slice(0, 120);
+  return normalized || 'nota';
+}
+
+function downloadNote() {
+  if (!selected.value) return;
+  const title = selected.value.title?.trim() || 'Sem título';
+  const content = `${title}\n\n${selected.value.content}\n\nAtualizada em: ${formatDate(selected.value.updatedAt)}\n`;
+  const blob = new Blob([content], { type: 'text/plain;charset=utf-8' });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = `${safeFileName(selected.value.title)}.txt`;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  URL.revokeObjectURL(url);
 }
 
 async function load() {
@@ -275,10 +302,7 @@ onBeforeUnmount(() => window.clearTimeout(searchTimer));
           :class="viewMode === 'cards' ? 'rounded-lg border border-border bg-surface p-4 hover:border-accent hover:bg-elevated' : 'w-full p-4 hover:bg-elevated'"
           @click="open(note)"
         >
-          <div class="flex items-start justify-between gap-3">
-            <h3 class="line-clamp-2 font-medium">{{ note.title || 'Sem título' }}</h3>
-            <Eye class="shrink-0 text-muted group-hover:text-accent" :size="18" />
-          </div>
+          <h3 class="line-clamp-2 font-medium">{{ note.title || 'Sem título' }}</h3>
           <p class="mt-3 line-clamp-3 text-sm text-muted">{{ excerpt(note.content) }}</p>
           <p class="mt-4 text-xs text-muted">Atualizada em {{ formatDate(note.updatedAt) }}</p>
         </button>
@@ -304,13 +328,18 @@ onBeforeUnmount(() => window.clearTimeout(searchTimer));
 
         <div v-if="modal === 'view'" class="space-y-5 p-5 sm:p-6">
           <article class="note-reading-panel note-markdown" v-html="renderedContent" />
-          <div class="flex flex-wrap items-center justify-end gap-3 border-t border-border pt-5">
+          <div class="flex flex-wrap items-center justify-between gap-3 border-t border-border pt-5">
             <AppButton variant="danger" :disabled="saving" @click="remove">
               <Trash2 :size="16" />Excluir
             </AppButton>
-            <AppButton @click="beginEdit">
-              <Pencil :size="16" />Editar
-            </AppButton>
+            <div class="flex flex-wrap gap-3">
+              <AppButton variant="secondary" @click="downloadNote">
+                <Download :size="16" />Baixar .txt
+              </AppButton>
+              <AppButton @click="beginEdit">
+                <Pencil :size="16" />Editar
+              </AppButton>
+            </div>
           </div>
         </div>
 
