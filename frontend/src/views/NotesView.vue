@@ -57,7 +57,10 @@ function snapshot() {
 }
 
 function formatDate(value) {
-  return new Date(value).toLocaleString('pt-BR', { dateStyle: 'medium', timeStyle: 'short' });
+  return new Date(value).toLocaleString('pt-BR', {
+    dateStyle: 'medium',
+    timeStyle: 'short'
+  });
 }
 
 async function load() {
@@ -180,7 +183,11 @@ async function save() {
 
 async function remove() {
   if (!selected.value) return;
-  if (!window.confirm(`Excluir “${selected.value.title || 'Sem título'}”? Esta ação não pode ser desfeita.`))
+  if (
+    !window.confirm(
+      `Excluir “${selected.value.title || 'Sem título'}”? Esta ação não pode ser desfeita.`
+    )
+  )
     return;
   saving.value = true;
   error.value = '';
@@ -220,37 +227,148 @@ onBeforeUnmount(() => window.clearTimeout(searchTimer));
       </div>
 
       <div class="flex flex-wrap items-end gap-3 rounded-lg border border-border bg-surface p-4">
-        <label class="relative min-w-52 flex-1"><span class="sr-only">Buscar notas</span><Search class="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-muted" :size="16" /><input v-model="query" class="w-full rounded-md border border-border bg-canvas py-2 pl-9 pr-3 text-sm" placeholder="Buscar título ou conteúdo" /></label>
-        <label><span class="sr-only">Data inicial</span><span class="mb-1 block text-xs text-muted">Atualizada a partir de</span><input v-model="from" class="min-h-10 rounded-md border border-border bg-canvas px-3 text-sm" type="date" /></label>
-        <label><span class="sr-only">Data final</span><span class="mb-1 block text-xs text-muted">Atualizada até</span><input v-model="to" class="min-h-10 rounded-md border border-border bg-canvas px-3 text-sm" type="date" /></label>
-        <label><span class="sr-only">Ordenar notas</span><span class="mb-1 block text-xs text-muted">Ordenar</span><select v-model="sort" class="min-h-10 rounded-md border border-border bg-canvas px-3 text-sm"><option value="updatedAt:desc">Atualizadas recentemente</option><option value="updatedAt:asc">Atualizadas primeiro</option><option value="createdAt:desc">Criadas recentemente</option><option value="title:asc">Título, A–Z</option><option value="title:desc">Título, Z–A</option></select></label>
-        <div class="flex gap-1 rounded-md border border-border bg-canvas p-1" aria-label="Visualização"><AppButton variant="secondary" :aria-pressed="viewMode === 'cards'" title="Blocos" @click="setView('cards')"><Grid2X2 :size="17" /><span class="sr-only">Exibir em blocos</span></AppButton><AppButton variant="secondary" :aria-pressed="viewMode === 'list'" title="Lista" @click="setView('list')"><List :size="17" /><span class="sr-only">Exibir em lista</span></AppButton></div>
+        <label class="relative min-w-52 flex-1">
+          <span class="sr-only">Buscar notas</span>
+          <Search class="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-muted" :size="16" />
+          <input v-model="query" class="w-full rounded-md border border-border bg-canvas py-2 pl-9 pr-3 text-sm" placeholder="Buscar título ou conteúdo" />
+        </label>
+        <label>
+          <span class="mb-1 block text-xs text-muted">Atualizada a partir de</span>
+          <input v-model="from" class="min-h-10 rounded-md border border-border bg-canvas px-3 text-sm" type="date" />
+        </label>
+        <label>
+          <span class="mb-1 block text-xs text-muted">Atualizada até</span>
+          <input v-model="to" class="min-h-10 rounded-md border border-border bg-canvas px-3 text-sm" type="date" />
+        </label>
+        <label>
+          <span class="mb-1 block text-xs text-muted">Ordenar</span>
+          <select v-model="sort" class="min-h-10 rounded-md border border-border bg-canvas px-3 text-sm">
+            <option value="updatedAt:desc">Atualizadas recentemente</option>
+            <option value="updatedAt:asc">Atualizadas primeiro</option>
+            <option value="createdAt:desc">Criadas recentemente</option>
+            <option value="title:asc">Título, A–Z</option>
+            <option value="title:desc">Título, Z–A</option>
+          </select>
+        </label>
+        <div class="flex gap-1 rounded-md border border-border bg-canvas p-1" aria-label="Visualização">
+          <AppButton variant="secondary" :aria-pressed="viewMode === 'cards'" title="Blocos" @click="setView('cards')">
+            <Grid2X2 :size="17" /><span class="sr-only">Exibir em blocos</span>
+          </AppButton>
+          <AppButton variant="secondary" :aria-pressed="viewMode === 'list'" title="Lista" @click="setView('list')">
+            <List :size="17" /><span class="sr-only">Exibir em lista</span>
+          </AppButton>
+        </div>
       </div>
 
       <p v-if="error && !modal" class="rounded-md border border-red-500/40 bg-red-500/10 p-3 text-sm text-red-200" role="alert">{{ error }}</p>
       <p v-if="notice" class="rounded-md border border-green-500/40 bg-green-500/10 p-3 text-sm text-green-200" role="status">{{ notice }}</p>
       <div v-if="loading" class="rounded-lg border border-border bg-surface p-8 text-sm text-muted">Carregando notas…</div>
-      <div v-else-if="notes.length === 0" class="rounded-lg border border-border bg-surface p-10 text-center text-sm text-muted"><FilePlus2 class="mx-auto" :size="28" /><p class="mt-3">{{ query || from || to ? 'Nenhuma nota corresponde aos filtros.' : 'Nenhuma nota criada ainda.' }}</p></div>
+      <div v-else-if="notes.length === 0" class="rounded-lg border border-border bg-surface p-10 text-center text-sm text-muted">
+        <FilePlus2 class="mx-auto" :size="28" />
+        <p class="mt-3">{{ query || from || to ? 'Nenhuma nota corresponde aos filtros.' : 'Nenhuma nota criada ainda.' }}</p>
+      </div>
       <div v-else :class="viewMode === 'cards' ? 'grid gap-4 sm:grid-cols-2 xl:grid-cols-3' : 'divide-y divide-border rounded-lg border border-border bg-surface'">
-        <button v-for="note in notes" :key="note.id" class="group text-left" :class="viewMode === 'cards' ? 'rounded-lg border border-border bg-surface p-4 hover:border-accent hover:bg-elevated' : 'w-full p-4 hover:bg-elevated'" @click="open(note)"><div class="flex items-start justify-between gap-3"><h3 class="line-clamp-2 font-medium">{{ note.title || 'Sem título' }}</h3><Eye class="shrink-0 text-muted group-hover:text-accent" :size="18" /></div><p class="mt-3 line-clamp-3 text-sm text-muted">{{ excerpt(note.content) }}</p><p class="mt-4 text-xs text-muted">Atualizada em {{ formatDate(note.updatedAt) }}</p></button>
+        <button
+          v-for="note in notes"
+          :key="note.id"
+          class="group text-left"
+          :class="viewMode === 'cards' ? 'rounded-lg border border-border bg-surface p-4 hover:border-accent hover:bg-elevated' : 'w-full p-4 hover:bg-elevated'"
+          @click="open(note)"
+        >
+          <div class="flex items-start justify-between gap-3">
+            <h3 class="line-clamp-2 font-medium">{{ note.title || 'Sem título' }}</h3>
+            <Eye class="shrink-0 text-muted group-hover:text-accent" :size="18" />
+          </div>
+          <p class="mt-3 line-clamp-3 text-sm text-muted">{{ excerpt(note.content) }}</p>
+          <p class="mt-4 text-xs text-muted">Atualizada em {{ formatDate(note.updatedAt) }}</p>
+        </button>
       </div>
     </section>
 
-    <div v-if="modal" class="fixed inset-0 z-50 grid place-items-center bg-black/70 p-4" @click.self="closeModal" @keydown.esc="closeModal">
-      <section class="max-h-[90vh] w-full max-w-3xl overflow-y-auto rounded-lg border border-border bg-surface shadow-2xl" role="dialog" aria-modal="true" :aria-label="modalTitle">
-        <header class="sticky top-0 flex items-center justify-between gap-3 border-b border-border bg-surface p-4"><div><h2 class="font-semibold">{{ modalTitle }}</h2><p v-if="selected && modal === 'view'" class="mt-1 text-xs text-muted">Atualizada em {{ formatDate(selected.updatedAt) }}</p></div><AppButton variant="secondary" title="Fechar" @click="closeModal"><X :size="18" /><span class="sr-only">Fechar</span></AppButton></header>
-        <div v-if="modal === 'view'" class="space-y-6 p-5 sm:p-6"><article class="note-markdown" v-html="renderedContent" /><div class="flex flex-wrap justify-between gap-3 border-t border-border pt-4"><AppButton variant="danger" :disabled="saving" @click="remove"><Trash2 :size="16" />Excluir</AppButton><AppButton @click="beginEdit"><Pencil :size="16" />Editar</AppButton></div></div>
-        <form v-else class="space-y-4 p-5 sm:p-6" @submit.prevent="save"><label class="block text-sm"><span>Título <span class="text-muted">(opcional)</span></span><input v-model="editor.title" class="mt-1 w-full rounded-md border border-border bg-canvas px-3 py-2" :aria-invalid="Boolean(fieldErrors.title)" maxlength="160" placeholder="Ex.: Procedimento de deploy" /><span v-if="fieldErrors.title" class="mt-1 block text-xs text-red-300">{{ fieldErrors.title }}</span></label><div><div class="flex flex-wrap gap-1 rounded-t-md border border-border bg-elevated p-2" aria-label="Formatação rápida"><AppButton variant="secondary" type="button" title="Negrito" @click="insertMarkup('**')"><Bold :size="16" /></AppButton><AppButton variant="secondary" type="button" title="Itálico" @click="insertMarkup('*')"><Italic :size="16" /></AppButton><AppButton variant="secondary" type="button" title="Sublinhado" @click="insertMarkup('++')"><Underline :size="16" /></AppButton><AppButton variant="secondary" type="button" title="Título" @click="prefixLine('## ')"><TextCursorInput :size="16" /></AppButton><AppButton variant="secondary" type="button" title="Lista" @click="prefixLine('- ')"><List :size="16" /></AppButton><AppButton variant="secondary" type="button" title="Texto pequeno" @click="insertMarkup('[size=small]', '[/size]')">A−</AppButton><AppButton variant="secondary" type="button" title="Texto grande" @click="insertMarkup('[size=large]', '[/size]')">A+</AppButton></div><label class="block text-sm"><span class="sr-only">Conteúdo</span><textarea ref="textarea" v-model="editor.content" class="min-h-72 w-full resize-y rounded-b-md border border-t-0 border-border bg-canvas px-3 py-2 leading-6" :aria-invalid="Boolean(fieldErrors.content)" maxlength="100000" required placeholder="Registre o contexto operacional…" /></label><span v-if="fieldErrors.content" class="mt-1 block text-xs text-red-300">{{ fieldErrors.content }}</span></div><p v-if="error" class="rounded-md border border-red-500/40 bg-red-500/10 p-3 text-sm text-red-200" role="alert">{{ error }}</p><div class="flex flex-wrap justify-end gap-3"><AppButton variant="secondary" type="button" :disabled="saving" @click="closeModal">Cancelar</AppButton><AppButton type="submit" :loading="saving">Salvar nota</AppButton></div></form>
+    <div v-if="modal" class="fixed inset-0 z-50 grid place-items-center bg-black/75 p-4 backdrop-blur-sm" @click.self="closeModal" @keydown.esc="closeModal">
+      <section
+        class="max-h-[92vh] w-full max-w-3xl overflow-y-auto rounded-xl border border-border bg-surface shadow-2xl"
+        role="dialog"
+        aria-modal="true"
+        :aria-label="modalTitle"
+      >
+        <header class="sticky top-0 z-10 flex items-start justify-between gap-4 border-b border-border bg-surface/95 px-5 py-4 backdrop-blur sm:px-6">
+          <div class="min-w-0">
+            <h2 class="truncate text-lg font-semibold tracking-tight">{{ modalTitle }}</h2>
+            <p v-if="selected && modal === 'view'" class="mt-1 text-xs text-muted">Atualizada em {{ formatDate(selected.updatedAt) }}</p>
+          </div>
+          <AppButton variant="secondary" title="Fechar" @click="closeModal">
+            <X :size="18" /><span class="sr-only">Fechar</span>
+          </AppButton>
+        </header>
+
+        <div v-if="modal === 'view'" class="space-y-5 p-5 sm:p-6">
+          <article class="note-reading-panel note-markdown" v-html="renderedContent" />
+          <div class="flex flex-wrap items-center justify-end gap-3 border-t border-border pt-5">
+            <AppButton variant="danger" :disabled="saving" @click="remove">
+              <Trash2 :size="16" />Excluir
+            </AppButton>
+            <AppButton @click="beginEdit">
+              <Pencil :size="16" />Editar
+            </AppButton>
+          </div>
+        </div>
+
+        <form v-else class="space-y-4 p-5 sm:p-6" @submit.prevent="save">
+          <label class="block text-sm">
+            <span>Título <span class="text-muted">(opcional)</span></span>
+            <input v-model="editor.title" class="mt-1 w-full rounded-md border border-border bg-canvas px-3 py-2" :aria-invalid="Boolean(fieldErrors.title)" maxlength="160" placeholder="Ex.: Procedimento de deploy" />
+            <span v-if="fieldErrors.title" class="mt-1 block text-xs text-red-300">{{ fieldErrors.title }}</span>
+          </label>
+          <div>
+            <div class="flex flex-wrap gap-1 rounded-t-md border border-border bg-elevated p-2" aria-label="Formatação rápida">
+              <AppButton variant="secondary" type="button" title="Negrito" @click="insertMarkup('**')"><Bold :size="16" /></AppButton>
+              <AppButton variant="secondary" type="button" title="Itálico" @click="insertMarkup('*')"><Italic :size="16" /></AppButton>
+              <AppButton variant="secondary" type="button" title="Sublinhado" @click="insertMarkup('++')"><Underline :size="16" /></AppButton>
+              <AppButton variant="secondary" type="button" title="Título" @click="prefixLine('## ')"><TextCursorInput :size="16" /></AppButton>
+              <AppButton variant="secondary" type="button" title="Lista" @click="prefixLine('- ')"><List :size="16" /></AppButton>
+              <AppButton variant="secondary" type="button" title="Texto pequeno" @click="insertMarkup('[size=small]', '[/size]')">A−</AppButton>
+              <AppButton variant="secondary" type="button" title="Texto grande" @click="insertMarkup('[size=large]', '[/size]')">A+</AppButton>
+            </div>
+            <label class="block text-sm">
+              <span class="sr-only">Conteúdo</span>
+              <textarea ref="textarea" v-model="editor.content" class="min-h-72 w-full resize-y rounded-b-md border border-t-0 border-border bg-canvas px-3 py-2 leading-6" :aria-invalid="Boolean(fieldErrors.content)" maxlength="100000" required placeholder="Registre o contexto operacional…" />
+            </label>
+            <span v-if="fieldErrors.content" class="mt-1 block text-xs text-red-300">{{ fieldErrors.content }}</span>
+          </div>
+          <p v-if="error" class="rounded-md border border-red-500/40 bg-red-500/10 p-3 text-sm text-red-200" role="alert">{{ error }}</p>
+          <div class="flex flex-wrap justify-end gap-3">
+            <AppButton variant="secondary" type="button" :disabled="saving" @click="closeModal">Cancelar</AppButton>
+            <AppButton type="submit" :loading="saving">Salvar nota</AppButton>
+          </div>
+        </form>
       </section>
     </div>
   </AppShell>
 </template>
 
 <style>
-.note-markdown { line-height: 1.7; overflow-wrap: anywhere; }
-.note-markdown h3, .note-markdown h4, .note-markdown h5 { font-weight: 600; margin: 1.25rem 0 .5rem; }
-.note-markdown p { margin: .75rem 0; }
-.note-markdown ul { list-style: disc; margin: .75rem 0; padding-left: 1.5rem; }
+.note-reading-panel {
+  min-height: 14rem;
+  border: 1px solid rgb(var(--color-border) / 0.9);
+  border-radius: 0.75rem;
+  background: rgb(var(--color-canvas) / 0.72);
+  padding: 1.5rem;
+  box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.025);
+}
+.note-markdown {
+  color: rgb(var(--color-foreground));
+  font-size: 1rem;
+  line-height: 1.8;
+  overflow-wrap: anywhere;
+}
+.note-markdown > :first-child { margin-top: 0; }
+.note-markdown > :last-child { margin-bottom: 0; }
+.note-markdown h3,
+.note-markdown h4,
+.note-markdown h5 { font-weight: 600; margin: 1.5rem 0 .65rem; }
+.note-markdown p { margin: .9rem 0; }
+.note-markdown ul { list-style: disc; margin: .9rem 0; padding-left: 1.5rem; }
 .note-size-small { font-size: .875rem; }
 .note-size-large { font-size: 1.25rem; }
 .note-size-xlarge { font-size: 1.5rem; }
