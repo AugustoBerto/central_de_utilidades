@@ -13,6 +13,7 @@ import { onBeforeUnmount, onMounted, ref, watch } from 'vue';
 
 import AppButton from '@/components/base/AppButton.vue';
 import AppShell from '@/components/layout/AppShell.vue';
+import ImagePreviewModal from '@/features/drive/ImagePreviewModal.vue';
 import { formatBytes } from '@/features/dashboard/format';
 import { api } from '@/services/api';
 import { useAuthStore } from '@/stores/auth';
@@ -28,6 +29,8 @@ const total = ref(0);
 const loading = ref(true);
 const error = ref('');
 const dragging = ref(false);
+const previewFile = ref(null);
+const previewTrigger = ref(null);
 let searchTimer;
 let uploadSequence = 0;
 
@@ -143,8 +146,14 @@ async function remove(file) {
   }
 }
 
-function preview(file) {
-  window.open(`/api/files/${file.id}/preview`, '_blank', 'noopener');
+function preview(file, event) {
+  previewTrigger.value = event?.currentTarget ?? null;
+  previewFile.value = file;
+}
+
+function closePreview() {
+  previewFile.value = null;
+  requestAnimationFrame(() => previewTrigger.value?.focus?.());
 }
 
 watch([query, sort], () => {
@@ -302,7 +311,7 @@ onBeforeUnmount(() => {
             <AppButton
               v-if="file.previewAvailable"
               variant="secondary"
-              @click="preview(file)"
+              @click="preview(file, $event)"
               >Preview</AppButton
             ><a
               :href="`/api/files/${file.id}/download`"
@@ -332,5 +341,7 @@ onBeforeUnmount(() => {
         </div>
       </div>
     </section>
+
+    <ImagePreviewModal v-if="previewFile" :file="previewFile" @close="closePreview" />
   </AppShell>
 </template>
