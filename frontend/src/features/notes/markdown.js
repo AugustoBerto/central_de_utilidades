@@ -20,6 +20,73 @@ function inline(value) {
     );
 }
 
+function highlightCode(code, language) {
+  const escaped = escapeHtml(code);
+  const lang = String(language || '').toLowerCase();
+
+  if (['bash', 'sh', 'shell', 'zsh'].includes(lang)) {
+    return escaped
+      .replace(/(^|\s)(#[^\n]*)/g, '$1<span class="tok-comment">$2</span>')
+      .replace(/(^|\s)(sudo|cd|ls|pwd|mkdir|rm|cp|mv|cat|grep|find|chmod|chown|npm|npx|git|docker|systemctl)(?=\s|$)/g, '$1<span class="tok-keyword">$2</span>')
+      .replace(/(--?[\w-]+)/g, '<span class="tok-attr">$1</span>')
+      .replace(/(&quot;[^&]*?&quot;|'[^']*?')/g, '<span class="tok-string">$1</span>');
+  }
+
+  if (['js', 'javascript', 'ts', 'typescript', 'vue'].includes(lang)) {
+    return escaped
+      .replace(/(\/\/[^\n]*|\/\*[\s\S]*?\*\/)/g, '<span class="tok-comment">$1</span>')
+      .replace(/\b(const|let|var|function|return|if|else|for|while|class|new|import|from|export|async|await|try|catch|throw|true|false|null|undefined)\b/g, '<span class="tok-keyword">$1</span>')
+      .replace(/(&quot;[^&]*?&quot;|'[^']*?'|`[^`]*?`)/g, '<span class="tok-string">$1</span>')
+      .replace(/\b(\d+(?:\.\d+)?)\b/g, '<span class="tok-number">$1</span>');
+  }
+
+  if (lang === 'json') {
+    return escaped
+      .replace(/(&quot;[^&]*?&quot;)(\s*:)?/g, (_match, text, colon) => colon ? `<span class="tok-property">${text}</span>${colon}` : `<span class="tok-string">${text}</span>`)
+      .replace(/\b(true|false|null)\b/g, '<span class="tok-keyword">$1</span>')
+      .replace(/\b(-?\d+(?:\.\d+)?)\b/g, '<span class="tok-number">$1</span>');
+  }
+
+  if (['html', 'xml'].includes(lang)) {
+    return escaped
+      .replace(/(&lt;\/?)([\w-]+)/g, '$1<span class="tok-tag">$2</span>')
+      .replace(/([\w-]+)=(&quot;[^&]*?&quot;)/g, '<span class="tok-attr">$1</span>=<span class="tok-string">$2</span>');
+  }
+
+  if (lang === 'css') {
+    return escaped
+      .replace(/(\/\*[\s\S]*?\*\/)/g, '<span class="tok-comment">$1</span>')
+      .replace(/([\w-]+)(\s*:)/g, '<span class="tok-property">$1</span>$2')
+      .replace(/(#[0-9a-fA-F]{3,8}|\b\d+(?:\.\d+)?(?:px|rem|em|%|vh|vw)?\b)/g, '<span class="tok-number">$1</span>');
+  }
+
+  if (lang === 'sql') {
+    return escaped
+      .replace(/\b(select|from|where|insert|into|update|delete|create|table|join|left|right|inner|outer|on|as|and|or|order|by|group|limit|values|set|null|not|primary|key)\b/gi, '<span class="tok-keyword">$1</span>')
+      .replace(/(&quot;[^&]*?&quot;|'[^']*?')/g, '<span class="tok-string">$1</span>')
+      .replace(/\b(\d+(?:\.\d+)?)\b/g, '<span class="tok-number">$1</span>');
+  }
+
+  if (['yaml', 'yml'].includes(lang)) {
+    return escaped
+      .replace(/(^|\n)(\s*)([\w.-]+)(:)/g, '$1$2<span class="tok-property">$3</span>$4')
+      .replace(/(^|\s)(#[^\n]*)/g, '$1<span class="tok-comment">$2</span>')
+      .replace(/(&quot;[^&]*?&quot;|'[^']*?')/g, '<span class="tok-string">$1</span>');
+  }
+
+  if (lang === 'dockerfile') {
+    return escaped.replace(/^(FROM|RUN|COPY|ADD|WORKDIR|CMD|ENTRYPOINT|ENV|EXPOSE|ARG|LABEL|USER|VOLUME)(?=\s)/gim, '<span class="tok-keyword">$1</span>');
+  }
+
+  if (lang === 'nginx') {
+    return escaped
+      .replace(/(^|\n)(\s*)(server|location|listen|server_name|proxy_pass|root|index|try_files)(?=\s)/g, '$1$2<span class="tok-keyword">$3</span>')
+      .replace(/(^|\s)(#[^\n]*)/g, '$1<span class="tok-comment">$2</span>');
+  }
+
+  return escaped;
+}
+
 function renderTable(lines) {
   if (lines.length < 2 || !/^\s*\|?\s*:?-{3,}/.test(lines[1])) return null;
   const rows = lines.map((line) => line.replace(/^\s*\||\|\s*$/g, '').split('|').map((cell) => cell.trim()));
@@ -32,6 +99,7 @@ export function renderMarkdown(content) {
   const lines = String(content).replace(/\r\n?/g, '\n').split('\n');
   const output = [];
   let index = 0;
+  let codeBlockIndex = 0;
 
   while (index < lines.length) {
     const line = lines[index];
@@ -46,7 +114,8 @@ export function renderMarkdown(content) {
       index += 1;
       while (index < lines.length && !/^```/.test(lines[index])) code.push(lines[index++]);
       if (index < lines.length) index += 1;
-      output.push(`<pre><code${language ? ` class="language-${escapeHtml(language)}"` : ''}>${escapeHtml(code.join('\n'))}</code></pre>`);
+      const blockId = `code-${++codeBlockIndex}`;
+      output.push(`<section class="note-code-block" data-block-id="${blockId}"><header><span>${escapeHtml(language || 'texto')}</span><button type="button" class="note-code-copy">Copiar</button></header><pre><code class="language-${escapeHtml(language || 'text')}">${highlightCode(code.join('\n'), language)}</code></pre></section>`);
       continue;
     }
 
@@ -110,13 +179,25 @@ export function renderMarkdown(content) {
   return output.join('');
 }
 
-export function excerpt(content, limit = 180) {
-  const text = String(content)
-    .replace(/```[\s\S]*?```/g, ' ')
+export function notePreview(content, limit = 220) {
+  const source = String(content);
+  const codeLabels = [];
+  const withoutCode = source.replace(/```([^\n]*)\n?[\s\S]*?```/g, (_match, language) => {
+    const label = language.trim();
+    codeLabels.push(label ? `Trecho de código: ${label}` : 'Trecho de código');
+    return ' ';
+  });
+  const text = withoutCode
     .replace(/^(#{1,6}|>|\s*[-*]|\s*\d+\.)\s+/gm, '')
     .replace(/\[([^\]]+)\]\([^)]+\)/g, '$1')
+    .replace(/\|/g, ' ')
     .replace(/\*\*|\*|~~|\+\+|`|\[size=(?:small|large|xlarge)\]|\[\/size\]/g, '')
     .replace(/\s+/g, ' ')
     .trim();
-  return text.length > limit ? `${text.slice(0, limit).trimEnd()}…` : text;
+  const combined = [text, ...codeLabels].filter(Boolean).join(' · ');
+  return combined.length > limit ? `${combined.slice(0, limit).trimEnd()}…` : combined;
+}
+
+export function excerpt(content, limit = 180) {
+  return notePreview(content, limit);
 }
