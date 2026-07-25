@@ -28,6 +28,7 @@ import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import AppButton from '@/components/base/AppButton.vue';
 import AppModal from '@/components/base/AppModal.vue';
 import AppShell from '@/components/layout/AppShell.vue';
+import MarkdownEditor from '@/features/notes/MarkdownEditor.vue';
 import MarkdownViewer from '@/features/notes/MarkdownViewer.vue';
 import { notePreview } from '@/features/notes/markdown';
 import { ApiError, api } from '@/services/api';
@@ -51,7 +52,7 @@ const fieldErrors = ref({});
 const modal = ref(null);
 const selected = ref(null);
 const editor = ref({ title: '', content: '', updatedAt: null });
-const textarea = ref(null);
+const markdownEditor = ref(null);
 const fileInput = ref(null);
 const savedSnapshot = ref('');
 let searchTimer;
@@ -115,6 +116,7 @@ async function open(note) {
     modal.value = 'view';
   } catch (caught) { error.value = caught.message; }
 }
+function focusEditor() { nextTick(() => markdownEditor.value?.focus()); }
 function beginCreate(initial = { title: '', content: '' }) {
   selected.value = null;
   editor.value = { title: initial.title, content: initial.content, updatedAt: null };
@@ -124,7 +126,7 @@ function beginCreate(initial = { title: '', content: '' }) {
   desktopMode.value = 'split';
   modal.value = 'create';
   snapshot();
-  nextTick(() => textarea.value?.focus());
+  focusEditor();
 }
 function beginEdit() {
   editor.value = { title: selected.value.title, content: selected.value.content, updatedAt: selected.value.updatedAt };
@@ -133,7 +135,7 @@ function beginEdit() {
   desktopMode.value = 'split';
   modal.value = 'edit';
   snapshot();
-  nextTick(() => textarea.value?.focus());
+  focusEditor();
 }
 function closeModal() {
   if (dirty.value && !window.confirm('Descartar alterações não salvas desta nota?')) return;
@@ -156,36 +158,14 @@ async function importFile(event) {
 }
 
 function replaceSelection(before, after = before, placeholder = 'texto') {
-  const input = textarea.value;
-  const start = input?.selectionStart ?? editor.value.content.length;
-  const end = input?.selectionEnd ?? start;
-  const value = editor.value.content;
-  const selectedText = value.slice(start, end) || placeholder;
-  editor.value.content = `${value.slice(0, start)}${before}${selectedText}${after}${value.slice(end)}`;
-  nextTick(() => { input?.focus(); input?.setSelectionRange(start + before.length, start + before.length + selectedText.length); });
+  markdownEditor.value?.replaceSelection(before, after, placeholder);
 }
 function prefixLines(prefix) {
-  const input = textarea.value;
-  const value = editor.value.content;
-  const start = input?.selectionStart ?? 0;
-  const end = input?.selectionEnd ?? start;
-  const lineStart = value.lastIndexOf('\n', start - 1) + 1;
-  const lineEndIndex = value.indexOf('\n', end);
-  const lineEnd = lineEndIndex === -1 ? value.length : lineEndIndex;
-  const block = value.slice(lineStart, lineEnd).split('\n').map((line) => `${prefix}${line}`).join('\n');
-  editor.value.content = `${value.slice(0, lineStart)}${block}${value.slice(lineEnd)}`;
-  nextTick(() => { input?.focus(); input?.setSelectionRange(lineStart, lineStart + block.length); });
+  markdownEditor.value?.prefixLines(prefix);
 }
 function insertLink() { replaceSelection('[', '](https://)', 'texto do link'); }
 function insertCodeBlock() { replaceSelection('```bash\n', '\n```', 'comando'); }
-function onEditorKeydown(event) {
-  if (!(event.ctrlKey || event.metaKey)) return;
-  const key = event.key.toLowerCase();
-  if (key === 'b') { event.preventDefault(); replaceSelection('**'); }
-  if (key === 'i') { event.preventDefault(); replaceSelection('*'); }
-  if (key === 'k') { event.preventDefault(); insertLink(); }
-  if (key === 's') { event.preventDefault(); save(); }
-}
+
 async function save() {
   if (saving.value) return;
   saving.value = true;
@@ -322,7 +302,7 @@ onBeforeUnmount(() => { window.clearTimeout(searchTimer); window.clearTimeout(co
         <div class="min-h-0 flex-1 bg-canvas/40 p-3 sm:p-4">
           <div class="grid h-full min-h-0 gap-3" :class="desktopMode === 'split' ? 'lg:grid-cols-2' : 'lg:grid-cols-1'">
             <div class="min-h-0" :class="[(editorTab === 'write' ? 'block' : 'hidden'), desktopMode === 'preview' ? 'lg:hidden' : 'lg:block']">
-              <textarea ref="textarea" v-model="editor.content" class="h-full min-h-[24rem] w-full resize-none rounded-lg border border-border bg-canvas px-4 py-4 font-mono text-sm leading-6 outline-none focus:border-accent" :aria-invalid="Boolean(fieldErrors.content)" maxlength="100000" required placeholder="Escreva em Markdown…" @keydown="onEditorKeydown" />
+              <MarkdownEditor ref="markdownEditor" v-model="editor.content" aria-label="Conteúdo da nota em Markdown" @save="save" />
             </div>
             <div class="min-h-0 overflow-y-auto rounded-lg border border-border bg-canvas p-5 sm:p-7" :class="[(editorTab === 'preview' ? 'block' : 'hidden'), desktopMode === 'write' ? 'lg:hidden' : 'lg:block']">
               <MarkdownViewer :content="editor.content" />
