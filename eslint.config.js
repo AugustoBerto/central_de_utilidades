@@ -19,6 +19,7 @@ export default [
     files: ['frontend/**/*.{js,vue}'],
     languageOptions: { globals: { ...globals.browser } },
     rules: {
+      'no-control-regex': 'off',
       'vue/html-closing-bracket-newline': 'off',
       'vue/html-self-closing': 'off',
       'vue/html-indent': 'off',
