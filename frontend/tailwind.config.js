@@ -4,13 +4,13 @@ export default {
   theme: {
     extend: {
       colors: {
-        canvas: '#0d1117',
-        surface: '#161b22',
-        elevated: '#21262d',
-        border: '#30363d',
-        foreground: '#f0f6fc',
-        muted: '#8b949e',
-        accent: '#2f81f7'
+        canvas: 'rgb(var(--color-canvas) / <alpha-value>)',
+        surface: 'rgb(var(--color-surface) / <alpha-value>)',
+        elevated: 'rgb(var(--color-elevated) / <alpha-value>)',
+        border: 'rgb(var(--color-border) / <alpha-value>)',
+        foreground: 'rgb(var(--color-foreground) / <alpha-value>)',
+        muted: 'rgb(var(--color-muted) / <alpha-value>)',
+        accent: 'rgb(var(--color-accent) / <alpha-value>)'
       }
     }
   },
