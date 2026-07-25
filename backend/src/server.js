@@ -1,7 +1,7 @@
 import 'dotenv/config';
 
 import { createApp } from './app.js';
-import { AuthService } from './auth-service.js';
+import { AuthService } from './session-auth-service.js';
 import { AutomationService } from './automation-service.js';
 import { loadConfig } from './config.js';
 import { openDatabase } from './database.js';

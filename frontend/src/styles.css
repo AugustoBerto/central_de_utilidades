@@ -27,6 +27,15 @@ body {
   outline-offset: 2px;
 }
 
+.note-reading-panel {
+  border-color: #30363d;
+  background: rgba(13, 17, 23, 0.78);
+}
+
+.note-reading-panel.note-markdown {
+  color: #f0f6fc;
+}
+
 @media (prefers-reduced-motion: reduce) {
   *,
   *::before,

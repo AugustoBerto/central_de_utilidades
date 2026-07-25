@@ -3,6 +3,13 @@ import { dirname } from 'node:path';
 
 import Database from 'better-sqlite3';
 
+function ensureColumn(database, table, column, definition) {
+  const columns = database.prepare(`PRAGMA table_info(${table})`).all();
+  if (!columns.some((item) => item.name === column)) {
+    database.exec(`ALTER TABLE ${table} ADD COLUMN ${column} ${definition}`);
+  }
+}
+
 export function openDatabase(path) {
   mkdirSync(dirname(path), { recursive: true });
   const database = new Database(path);
@@ -33,6 +40,10 @@ export function openDatabase(path) {
       token_hash TEXT NOT NULL UNIQUE,
       csrf_hash TEXT NOT NULL,
       device_label TEXT NOT NULL,
+      device_name TEXT,
+      browser_name TEXT,
+      ip_address TEXT,
+      user_agent TEXT,
       created_at TEXT NOT NULL,
       last_used_at TEXT NOT NULL,
       idle_expires_at TEXT NOT NULL,
@@ -105,6 +116,12 @@ export function openDatabase(path) {
     CREATE INDEX IF NOT EXISTS automation_runs_automation_idx ON automation_runs(automation_id, created_at DESC);
     CREATE INDEX IF NOT EXISTS metric_samples_collected_at_idx ON metric_samples(collected_at DESC);
   `);
+
+  // Bancos criados antes destes campos recebem uma migração aditiva e segura.
+  ensureColumn(database, 'sessions', 'device_name', 'TEXT');
+  ensureColumn(database, 'sessions', 'browser_name', 'TEXT');
+  ensureColumn(database, 'sessions', 'ip_address', 'TEXT');
+  ensureColumn(database, 'sessions', 'user_agent', 'TEXT');
 
   return database;
 }

@@ -37,6 +37,50 @@ function recoveryCode() {
   return `${randomBytes(5).toString('hex')}-${randomBytes(5).toString('hex')}`;
 }
 
+function browserFromUserAgent(userAgent = '') {
+  const candidates = [
+    ['Edge', /Edg(?:A|iOS)?\/(\d+)/],
+    ['Opera', /OPR\/(\d+)/],
+    ['Firefox', /Firefox\/(\d+)/],
+    ['Chrome', /(?:Chrome|CriOS)\/(\d+)/],
+    ['Safari', /Version\/(\d+).+Safari/]
+  ];
+  for (const [name, pattern] of candidates) {
+    const match = userAgent.match(pattern);
+    if (match) return `${name} ${match[1]}`;
+  }
+  return 'Navegador não identificado';
+}
+
+function deviceFromUserAgent(userAgent = '') {
+  if (/iPad/i.test(userAgent)) return 'iPad';
+  if (/iPhone/i.test(userAgent)) return 'iPhone';
+  if (/Android/i.test(userAgent)) return /Mobile/i.test(userAgent) ? 'Android' : 'Tablet Android';
+  if (/Windows/i.test(userAgent)) return 'Windows';
+  if (/Macintosh|Mac OS X/i.test(userAgent)) return 'macOS';
+  if (/CrOS/i.test(userAgent)) return 'ChromeOS';
+  if (/Linux/i.test(userAgent)) return 'Linux';
+  return 'Dispositivo não identificado';
+}
+
+function normalizeClientMetadata({ deviceLabel, ipAddress, userAgent } = {}) {
+  const safeUserAgent = String(userAgent ?? '').slice(0, 512);
+  const deviceName = deviceFromUserAgent(safeUserAgent);
+  const browserName = browserFromUserAgent(safeUserAgent);
+  const inferredLabel = `${deviceName} · ${browserName}`;
+  const legacyLabel = String(deviceLabel ?? '').trim();
+  return {
+    deviceLabel:
+      legacyLabel && legacyLabel.toLocaleLowerCase('pt-BR') !== 'navegador atual'
+        ? legacyLabel.slice(0, 128)
+        : inferredLabel.slice(0, 128),
+    deviceName,
+    browserName,
+    ipAddress: String(ipAddress ?? '').replace(/^::ffff:/, '').slice(0, 64) || null,
+    userAgent: safeUserAgent || null
+  };
+}
+
 function assertUsername(username) {
   if (!/^[a-zA-Z0-9._-]{3,64}$/.test(username ?? ''))
     throw new HttpError(422, 'VALIDATION_ERROR', 'Usuário inválido.', {
@@ -139,13 +183,10 @@ export class AuthService {
     };
   }
 
-  async login({
-    username,
-    password,
-    totpCode,
-    recoveryCode,
-    deviceLabel = 'Navegador atual'
-  }) {
+  async login(
+    { username, password, totpCode, recoveryCode, deviceLabel },
+    clientMetadata = {}
+  ) {
     const user = this.database
       .prepare('SELECT * FROM users WHERE username = ?')
       .get(username);
@@ -172,10 +213,13 @@ export class AuthService {
     }
     if (!secondFactorValid)
       throw new HttpError(401, 'INVALID_SECOND_FACTOR', 'Credenciais inválidas.');
-    return this.createSession(user, deviceLabel);
+    return this.createSession(
+      user,
+      normalizeClientMetadata({ ...clientMetadata, deviceLabel })
+    );
   }
 
-  createSession(user, deviceLabel) {
+  createSession(user, metadata = {}) {
     const rawToken = token();
     const csrfToken = token();
     const timestamp = nowIso();
@@ -186,16 +230,21 @@ export class AuthService {
       idleExpiresAt: plusDays(this.config.sessionIdleDays),
       absoluteExpiresAt: plusDays(this.config.sessionAbsoluteDays)
     };
+    const normalized = normalizeClientMetadata(metadata);
     this.database
       .prepare(
-        'INSERT INTO sessions (id, user_id, token_hash, csrf_hash, device_label, created_at, last_used_at, idle_expires_at, absolute_expires_at, rotated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
+        'INSERT INTO sessions (id, user_id, token_hash, csrf_hash, device_label, device_name, browser_name, ip_address, user_agent, created_at, last_used_at, idle_expires_at, absolute_expires_at, rotated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
       )
       .run(
         session.id,
         user.id,
         sha256(rawToken),
         sha256(csrfToken),
-        String(deviceLabel).slice(0, 128),
+        normalized.deviceLabel,
+        normalized.deviceName,
+        normalized.browserName,
+        normalized.ipAddress,
+        normalized.userAgent,
         timestamp,
         timestamp,
         session.idleExpiresAt,
@@ -309,10 +358,15 @@ export class AuthService {
   listSessions(userId, currentSessionId) {
     return this.database
       .prepare(
-        'SELECT id, device_label AS deviceLabel, created_at AS createdAt, last_used_at AS lastUsedAt, idle_expires_at AS idleExpiresAt FROM sessions WHERE user_id = ? AND revoked_at IS NULL ORDER BY last_used_at DESC'
+        'SELECT id, device_label AS deviceLabel, device_name AS deviceName, browser_name AS browserName, ip_address AS ipAddress, created_at AS createdAt, last_used_at AS lastUsedAt, idle_expires_at AS idleExpiresAt FROM sessions WHERE user_id = ? AND revoked_at IS NULL ORDER BY last_used_at DESC'
       )
       .all(userId)
-      .map((session) => ({ ...session, current: session.id === currentSessionId }));
+      .map((session) => ({
+        ...session,
+        deviceName: session.deviceName || 'Dispositivo não identificado',
+        browserName: session.browserName || 'Navegador não identificado',
+        current: session.id === currentSessionId
+      }));
   }
 
   revokeOtherSessions(userId, currentSessionId) {
