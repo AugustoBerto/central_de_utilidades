@@ -33,5 +33,5 @@ onBeforeUnmount(() => window.clearTimeout(resetTimer));
 </script>
 
 <template>
-  <article class="note-markdown" v-html="html" @click="onClick" />
+  <article class="note-markdown" @click="onClick" v-html="html" />
 </template>
