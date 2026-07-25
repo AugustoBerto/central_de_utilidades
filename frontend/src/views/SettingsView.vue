@@ -1,17 +1,20 @@
 <script setup>
-import { AlertTriangle, Monitor, RefreshCcw, ShieldCheck } from 'lucide-vue-next';
+import { AlertTriangle, LogOut, Monitor, RefreshCcw, ShieldCheck, User } from 'lucide-vue-next';
 import { onMounted, ref } from 'vue';
+import { useRouter } from 'vue-router';
 
 import AppButton from '@/components/base/AppButton.vue';
 import AppShell from '@/components/layout/AppShell.vue';
 import { useAuthStore } from '@/stores/auth';
 
 const auth = useAuthStore();
+const router = useRouter();
 const sessions = ref([]);
 const loading = ref(true);
 const error = ref('');
 const notice = ref('');
 const changing = ref(false);
+const loggingOut = ref(false);
 
 function formatDate(value) {
   return new Intl.DateTimeFormat('pt-BR', {
@@ -29,6 +32,18 @@ async function load() {
     error.value = caught.message;
   } finally {
     loading.value = false;
+  }
+}
+
+async function logout() {
+  loggingOut.value = true;
+  error.value = '';
+  try {
+    await auth.logout();
+    await router.replace({ name: 'login' });
+  } catch (caught) {
+    error.value = caught.message;
+    loggingOut.value = false;
   }
 }
 
@@ -68,6 +83,23 @@ onMounted(load);
 <template>
   <AppShell>
     <section class="max-w-3xl space-y-6">
+      <div class="rounded-lg border border-border bg-surface p-5">
+        <div class="flex flex-wrap items-center gap-4">
+          <span class="rounded-md border border-border bg-elevated p-2 text-accent">
+            <User :size="21" aria-hidden="true" />
+          </span>
+          <div class="min-w-0 flex-1">
+            <h2 class="font-semibold">Conta</h2>
+            <p class="mt-1 truncate text-sm text-muted">
+              Usuário conectado: <span class="text-foreground">{{ auth.user?.username }}</span>
+            </p>
+          </div>
+          <AppButton variant="secondary" :loading="loggingOut" @click="logout">
+            <LogOut :size="16" aria-hidden="true" />Sair da conta
+          </AppButton>
+        </div>
+      </div>
+
       <div class="rounded-lg border border-border bg-surface p-5">
         <div class="flex gap-3">
           <ShieldCheck
