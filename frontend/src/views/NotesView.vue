@@ -2,7 +2,7 @@
 /* eslint-disable vue/no-v-html -- renderMarkdown escapa entrada e gera somente marcação limitada. */
 import {
   Bold,
-  Eye,
+  Download,
   FilePlus2,
   Grid2X2,
   Italic,
@@ -58,6 +58,33 @@ function snapshot() {
 
 function formatDate(value) {
   return new Date(value).toLocaleString('pt-BR', { dateStyle: 'medium', timeStyle: 'short' });
+}
+
+function safeFileName(value) {
+  const normalized = (value || 'nota')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[<>:"/\\|?*\u0000-\u001f]/g, '')
+    .trim()
+    .replace(/\s+/g, '-')
+    .replace(/-+/g, '-')
+    .slice(0, 120);
+  return normalized || 'nota';
+}
+
+function downloadNote() {
+  if (!selected.value) return;
+  const title = selected.value.title?.trim() || 'Sem título';
+  const content = `${title}\n\n${selected.value.content}\n\nAtualizada em: ${formatDate(selected.value.updatedAt)}\n`;
+  const blob = new Blob([content], { type: 'text/plain;charset=utf-8' });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = `${safeFileName(selected.value.title)}.txt`;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  URL.revokeObjectURL(url);
 }
 
 async function load() {
@@ -232,14 +259,14 @@ onBeforeUnmount(() => window.clearTimeout(searchTimer));
       <div v-if="loading" class="rounded-lg border border-border bg-surface p-8 text-sm text-muted">Carregando notas…</div>
       <div v-else-if="notes.length === 0" class="rounded-lg border border-border bg-surface p-10 text-center text-sm text-muted"><FilePlus2 class="mx-auto" :size="28" /><p class="mt-3">{{ query || from || to ? 'Nenhuma nota corresponde aos filtros.' : 'Nenhuma nota criada ainda.' }}</p></div>
       <div v-else :class="viewMode === 'cards' ? 'grid gap-4 sm:grid-cols-2 xl:grid-cols-3' : 'divide-y divide-border rounded-lg border border-border bg-surface'">
-        <button v-for="note in notes" :key="note.id" class="group text-left" :class="viewMode === 'cards' ? 'rounded-lg border border-border bg-surface p-4 hover:border-accent hover:bg-elevated' : 'w-full p-4 hover:bg-elevated'" @click="open(note)"><div class="flex items-start justify-between gap-3"><h3 class="line-clamp-2 font-medium">{{ note.title || 'Sem título' }}</h3><Eye class="shrink-0 text-muted group-hover:text-accent" :size="18" /></div><p class="mt-3 line-clamp-3 text-sm text-muted">{{ excerpt(note.content) }}</p><p class="mt-4 text-xs text-muted">Atualizada em {{ formatDate(note.updatedAt) }}</p></button>
+        <button v-for="note in notes" :key="note.id" class="group text-left" :class="viewMode === 'cards' ? 'rounded-lg border border-border bg-surface p-4 hover:border-accent hover:bg-elevated' : 'w-full p-4 hover:bg-elevated'" @click="open(note)"><h3 class="line-clamp-2 font-medium">{{ note.title || 'Sem título' }}</h3><p class="mt-3 line-clamp-3 text-sm text-muted">{{ excerpt(note.content) }}</p><p class="mt-4 text-xs text-muted">Atualizada em {{ formatDate(note.updatedAt) }}</p></button>
       </div>
     </section>
 
     <div v-if="modal" class="fixed inset-0 z-50 grid place-items-center bg-black/70 p-4" @click.self="closeModal" @keydown.esc="closeModal">
       <section class="max-h-[90vh] w-full max-w-3xl overflow-y-auto rounded-lg border border-border bg-surface shadow-2xl" role="dialog" aria-modal="true" :aria-label="modalTitle">
         <header class="sticky top-0 flex items-center justify-between gap-3 border-b border-border bg-surface p-4"><div><h2 class="font-semibold">{{ modalTitle }}</h2><p v-if="selected && modal === 'view'" class="mt-1 text-xs text-muted">Atualizada em {{ formatDate(selected.updatedAt) }}</p></div><AppButton variant="secondary" title="Fechar" @click="closeModal"><X :size="18" /><span class="sr-only">Fechar</span></AppButton></header>
-        <div v-if="modal === 'view'" class="space-y-6 p-5 sm:p-6"><article class="note-markdown" v-html="renderedContent" /><div class="flex flex-wrap justify-between gap-3 border-t border-border pt-4"><AppButton variant="danger" :disabled="saving" @click="remove"><Trash2 :size="16" />Excluir</AppButton><AppButton @click="beginEdit"><Pencil :size="16" />Editar</AppButton></div></div>
+        <div v-if="modal === 'view'" class="space-y-6 p-5 sm:p-6"><article class="note-markdown" v-html="renderedContent" /><div class="flex flex-wrap justify-between gap-3 border-t border-border pt-4"><AppButton variant="danger" :disabled="saving" @click="remove"><Trash2 :size="16" />Excluir</AppButton><div class="flex flex-wrap gap-3"><AppButton variant="secondary" @click="downloadNote"><Download :size="16" />Baixar .txt</AppButton><AppButton @click="beginEdit"><Pencil :size="16" />Editar</AppButton></div></div></div>
         <form v-else class="space-y-4 p-5 sm:p-6" @submit.prevent="save"><label class="block text-sm"><span>Título <span class="text-muted">(opcional)</span></span><input v-model="editor.title" class="mt-1 w-full rounded-md border border-border bg-canvas px-3 py-2" :aria-invalid="Boolean(fieldErrors.title)" maxlength="160" placeholder="Ex.: Procedimento de deploy" /><span v-if="fieldErrors.title" class="mt-1 block text-xs text-red-300">{{ fieldErrors.title }}</span></label><div><div class="flex flex-wrap gap-1 rounded-t-md border border-border bg-elevated p-2" aria-label="Formatação rápida"><AppButton variant="secondary" type="button" title="Negrito" @click="insertMarkup('**')"><Bold :size="16" /></AppButton><AppButton variant="secondary" type="button" title="Itálico" @click="insertMarkup('*')"><Italic :size="16" /></AppButton><AppButton variant="secondary" type="button" title="Sublinhado" @click="insertMarkup('++')"><Underline :size="16" /></AppButton><AppButton variant="secondary" type="button" title="Título" @click="prefixLine('## ')"><TextCursorInput :size="16" /></AppButton><AppButton variant="secondary" type="button" title="Lista" @click="prefixLine('- ')"><List :size="16" /></AppButton><AppButton variant="secondary" type="button" title="Texto pequeno" @click="insertMarkup('[size=small]', '[/size]')">A−</AppButton><AppButton variant="secondary" type="button" title="Texto grande" @click="insertMarkup('[size=large]', '[/size]')">A+</AppButton></div><label class="block text-sm"><span class="sr-only">Conteúdo</span><textarea ref="textarea" v-model="editor.content" class="min-h-72 w-full resize-y rounded-b-md border border-t-0 border-border bg-canvas px-3 py-2 leading-6" :aria-invalid="Boolean(fieldErrors.content)" maxlength="100000" required placeholder="Registre o contexto operacional…" /></label><span v-if="fieldErrors.content" class="mt-1 block text-xs text-red-300">{{ fieldErrors.content }}</span></div><p v-if="error" class="rounded-md border border-red-500/40 bg-red-500/10 p-3 text-sm text-red-200" role="alert">{{ error }}</p><div class="flex flex-wrap justify-end gap-3"><AppButton variant="secondary" type="button" :disabled="saving" @click="closeModal">Cancelar</AppButton><AppButton type="submit" :loading="saving">Salvar nota</AppButton></div></form>
       </section>
     </div>
