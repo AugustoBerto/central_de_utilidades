@@ -1,6 +1,11 @@
 <script setup>
+import { css } from '@codemirror/lang-css';
+import { html } from '@codemirror/lang-html';
+import { javascript } from '@codemirror/lang-javascript';
 import { markdown } from '@codemirror/lang-markdown';
-import { basicSetup, EditorView } from 'codemirror';
+import { HighlightStyle, LanguageDescription, syntaxHighlighting } from '@codemirror/language';
+import { tags } from '@lezer/highlight';
+import { EditorView, minimalSetup } from 'codemirror';
 import { onBeforeUnmount, onMounted, ref, watch } from 'vue';
 
 const props = defineProps({
@@ -13,31 +18,55 @@ const host = ref(null);
 let view;
 let applyingExternalValue = false;
 
-const theme = EditorView.theme({
+const codeLanguages = [
+  LanguageDescription.of({ name: 'JavaScript', alias: ['js', 'javascript', 'jsx'], support: javascript({ jsx: true }) }),
+  LanguageDescription.of({ name: 'TypeScript', alias: ['ts', 'typescript', 'tsx'], support: javascript({ jsx: true, typescript: true }) }),
+  LanguageDescription.of({ name: 'HTML', alias: ['html', 'xml', 'vue'], support: html() }),
+  LanguageDescription.of({ name: 'CSS', alias: ['css'], support: css() })
+];
+
+const editorTheme = EditorView.theme({
   '&': {
     height: '100%',
-    backgroundColor: '#0d1117',
-    color: '#e6edf3',
+    backgroundColor: 'rgb(var(--color-canvas))',
+    color: 'rgb(var(--color-foreground))',
     fontSize: '14px'
   },
   '.cm-content': {
     minHeight: '100%',
     padding: '16px',
-    caretColor: '#58a6ff',
+    caretColor: 'rgb(var(--color-accent))',
     fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace',
     lineHeight: '1.65'
   },
   '.cm-scroller': { overflow: 'auto' },
   '.cm-gutters': {
-    backgroundColor: '#161b22',
-    color: '#6e7681',
-    borderRight: '1px solid #30363d'
+    backgroundColor: 'rgb(var(--color-surface))',
+    color: 'rgb(var(--color-muted))',
+    borderRight: '1px solid rgb(var(--color-border))'
   },
-  '.cm-activeLine, .cm-activeLineGutter': { backgroundColor: '#161b22' },
-  '.cm-selectionBackground, ::selection': { backgroundColor: '#264f78 !important' },
-  '.cm-cursor, .cm-dropCursor': { borderLeftColor: '#58a6ff' },
-  '.cm-focused': { outline: 'none' }
-}, { dark: true });
+  '.cm-activeLine, .cm-activeLineGutter': { backgroundColor: 'rgb(var(--color-elevated) / .72)' },
+  '&.cm-focused .cm-selectionBackground, .cm-selectionBackground': { backgroundColor: 'rgb(var(--selection)) !important' },
+  '.cm-content ::selection': { backgroundColor: 'rgb(var(--selection)) !important' },
+  '.cm-searchMatch': { backgroundColor: 'rgb(var(--color-accent) / .18)', outline: '1px solid rgb(var(--color-accent) / .55)' },
+  '.cm-searchMatch.cm-searchMatch-selected': { backgroundColor: 'rgb(var(--selection))' },
+  '.cm-selectionMatch': { backgroundColor: 'transparent' },
+  '.cm-cursor, .cm-dropCursor': { borderLeftColor: 'rgb(var(--color-accent))' },
+  '&.cm-focused': { outline: 'none' }
+});
+
+const highlightStyle = HighlightStyle.define([
+  { tag: [tags.heading1, tags.heading2, tags.heading3, tags.heading4], color: 'rgb(var(--code-keyword))', fontWeight: '700' },
+  { tag: [tags.keyword, tags.tagName, tags.bool, tags.null], color: 'rgb(var(--code-keyword))' },
+  { tag: [tags.string, tags.special(tags.string), tags.link], color: 'rgb(var(--code-string))' },
+  { tag: [tags.number, tags.atom], color: 'rgb(var(--code-number))' },
+  { tag: [tags.propertyName, tags.attributeName, tags.variableName], color: 'rgb(var(--code-property))' },
+  { tag: [tags.comment, tags.quote], color: 'rgb(var(--code-comment))', fontStyle: 'italic' },
+  { tag: [tags.emphasis], fontStyle: 'italic' },
+  { tag: [tags.strong], fontWeight: '700' },
+  { tag: [tags.monospace], color: 'rgb(var(--code-string))' },
+  { tag: [tags.punctuation, tags.meta], color: 'rgb(var(--color-muted))' }
+]);
 
 function currentSelection() {
   return view?.state.selection.main;
@@ -50,10 +79,7 @@ function replaceSelection(before, after = before, placeholder = 'texto') {
   const insertion = `${before}${selectedText}${after}`;
   view.dispatch({
     changes: { from: selection.from, to: selection.to, insert: insertion },
-    selection: {
-      anchor: selection.from + before.length,
-      head: selection.from + before.length + selectedText.length
-    }
+    selection: { anchor: selection.from + before.length, head: selection.from + before.length + selectedText.length }
   });
   view.focus();
 }
@@ -79,26 +105,10 @@ function focus() {
 function handleShortcut(event) {
   if (!(event.ctrlKey || event.metaKey)) return false;
   const key = event.key.toLowerCase();
-  if (key === 's') {
-    event.preventDefault();
-    emit('save');
-    return true;
-  }
-  if (key === 'b') {
-    event.preventDefault();
-    replaceSelection('**');
-    return true;
-  }
-  if (key === 'i') {
-    event.preventDefault();
-    replaceSelection('*');
-    return true;
-  }
-  if (key === 'k') {
-    event.preventDefault();
-    replaceSelection('[', '](https://)', 'texto do link');
-    return true;
-  }
+  if (key === 's') { event.preventDefault(); emit('save'); return true; }
+  if (key === 'b') { event.preventDefault(); replaceSelection('**'); return true; }
+  if (key === 'i') { event.preventDefault(); replaceSelection('*'); return true; }
+  if (key === 'k') { event.preventDefault(); replaceSelection('[', '](https://)', 'texto do link'); return true; }
   return false;
 }
 
@@ -107,9 +117,10 @@ onMounted(() => {
     parent: host.value,
     doc: props.modelValue,
     extensions: [
-      basicSetup,
-      markdown(),
-      theme,
+      minimalSetup,
+      markdown({ codeLanguages }),
+      syntaxHighlighting(highlightStyle),
+      editorTheme,
       EditorView.lineWrapping,
       EditorView.contentAttributes.of({ 'aria-label': props.ariaLabel }),
       EditorView.domEventHandlers({ keydown: handleShortcut }),
