@@ -20,6 +20,28 @@ jobs:
           node-version: 22
           cache: npm
       - run: npm ci
-      - run: npm run lint
-      - run: npm test
-      - run: npm run build
+      - name: Run validation commands
+        id: validate
+        shell: bash
+        run: |
+          mkdir -p validation-reports
+          set +e
+          npm run lint > validation-reports/lint.txt 2>&1
+          lint_status=$?
+          npm test > validation-reports/test.txt 2>&1
+          test_status=$?
+          npm run build > validation-reports/build.txt 2>&1
+          build_status=$?
+          set -e
+          cat validation-reports/lint.txt
+          cat validation-reports/test.txt
+          cat validation-reports/build.txt
+          if [ "$lint_status" -ne 0 ] || [ "$test_status" -ne 0 ] || [ "$build_status" -ne 0 ]; then
+            exit 1
+          fi
+      - name: Upload validation reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: validation-reports
+          path: validation-reports
