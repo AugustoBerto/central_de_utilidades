@@ -18,15 +18,13 @@ import {
   Zap
 } from 'lucide-vue-next';
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue';
-import { useRoute, useRouter } from 'vue-router';
+import { useRoute } from 'vue-router';
 
-import AppButton from '@/components/base/AppButton.vue';
 import { api } from '@/services/api';
 import { useAuthStore } from '@/stores/auth';
 import { useUiStore } from '@/stores/ui';
 
 const route = useRoute();
-const router = useRouter();
 const auth = useAuthStore();
 const ui = useUiStore();
 const title = computed(() => route.meta.title ?? 'Painel de Utilidades');
@@ -54,11 +52,6 @@ const items = computed(() => [
 
 function closeMobileNavigation() {
   ui.closeMobileNavigation();
-}
-
-async function logout() {
-  await auth.logout();
-  await router.replace({ name: 'login' });
 }
 
 async function loadPinnedShortcuts() {
@@ -118,9 +111,7 @@ onBeforeUnmount(() => window.removeEventListener('shortcuts:changed', loadPinned
           :key="item.to"
           :to="item.to"
           class="flex min-h-11 items-center gap-3 rounded-md px-3 text-sm text-muted transition-colors hover:bg-elevated hover:text-foreground"
-          :class="{ 'pointer-events-none opacity-45': item.disabled }"
           active-class="bg-elevated text-foreground"
-          :aria-disabled="item.disabled || undefined"
           @click="closeMobileNavigation"
         >
           <component :is="item.icon" :size="18" aria-hidden="true" />
@@ -145,7 +136,7 @@ onBeforeUnmount(() => window.removeEventListener('shortcuts:changed', loadPinned
       :class="{ 'lg:pl-20': ui.sidebarCollapsed }"
     >
       <header
-        class="sticky top-0 z-20 flex min-h-16 items-center justify-between gap-2 overflow-hidden border-b border-border bg-canvas/95 px-4 backdrop-blur sm:px-6"
+        class="sticky top-0 z-20 flex min-h-16 items-center gap-3 overflow-hidden border-b border-border bg-canvas/95 px-4 backdrop-blur sm:px-6"
       >
         <div class="flex min-w-0 flex-1 items-center gap-3">
           <button
@@ -165,7 +156,7 @@ onBeforeUnmount(() => window.removeEventListener('shortcuts:changed', loadPinned
         </div>
         <nav
           v-if="pinnedShortcuts.length"
-          class="hidden min-w-0 flex-1 items-center justify-center gap-1 px-4 md:flex"
+          class="hidden shrink-0 items-center justify-end gap-1 md:flex"
           aria-label="Atalhos fixados"
         >
           <a
@@ -178,15 +169,9 @@ onBeforeUnmount(() => window.removeEventListener('shortcuts:changed', loadPinned
             class="inline-flex min-h-10 max-w-40 items-center gap-2 rounded-md px-3 text-sm text-muted hover:bg-elevated hover:text-foreground focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
           >
             <component :is="shortcutIcons[shortcut.iconKey]" :size="17" aria-hidden="true" />
-            <span class="truncate">{{ shortcut.label }}</span>
+            <span class="hidden truncate xl:inline">{{ shortcut.label }}</span>
           </a>
         </nav>
-        <div class="flex shrink-0 items-center gap-3">
-          <span class="hidden text-sm text-muted sm:inline">{{
-            auth.user?.username
-          }}</span>
-          <AppButton variant="secondary" @click="logout">Sair</AppButton>
-        </div>
       </header>
       <main class="mx-auto w-full min-w-0 max-w-7xl px-4 py-6 sm:px-6 lg:px-8">
         <slot />
