@@ -11,7 +11,13 @@ function toFolder(row) {
       parentId: row.parent_id,
       name: row.name,
       createdAt: row.created_at,
-      updatedAt: row.updated_at
+      updatedAt: row.updated_at,
+      ...(row.path === undefined
+        ? {}
+        : {
+            path: row.path,
+            depth: row.depth
+          })
     }
   );
 }
@@ -78,6 +84,43 @@ export class FolderService {
           )
           .all(normalizedParentId);
     return rows.map(toFolder);
+  }
+
+  tree() {
+    return this.database
+      .prepare(
+        `WITH RECURSIVE folder_tree
+         (id, parent_id, name, created_at, updated_at, depth, path) AS (
+           SELECT
+             id,
+             parent_id,
+             name,
+             created_at,
+             updated_at,
+             0,
+             name
+           FROM folders
+           WHERE parent_id IS NULL
+
+           UNION ALL
+
+           SELECT
+             folders.id,
+             folders.parent_id,
+             folders.name,
+             folders.created_at,
+             folders.updated_at,
+             folder_tree.depth + 1,
+             folder_tree.path || ' / ' || folders.name
+           FROM folders
+           JOIN folder_tree ON folders.parent_id = folder_tree.id
+         )
+         SELECT *
+         FROM folder_tree
+         ORDER BY path COLLATE NOCASE, id`
+      )
+      .all()
+      .map(toFolder);
   }
 
   path(id) {
