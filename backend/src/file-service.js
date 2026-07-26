@@ -141,6 +141,7 @@ export class FileService {
     this.tempDir = join(this.filesDir, '.tmp');
     this.maxUploadBytes = maxUploadBytes;
     this.driveSettingsService = driveSettingsService;
+    this.pendingUploadBytes = 0;
     mkdirSync(this.tempDir, { recursive: true });
   }
 
@@ -289,6 +290,10 @@ export class FileService {
     return this.get(file.id);
   }
 
+  pendingBytes() {
+    return this.pendingUploadBytes;
+  }
+
   uploadPolicy() {
     return this.driveSettingsService?.status() ?? {
       maxUploadBytes: this.maxUploadBytes,
@@ -305,14 +310,23 @@ export class FileService {
     }
   }
 
-  assertStorageAvailable(bytes, policy) {
+  assertStorageAvailable(bytes, policy, ownReservation = 0) {
     if (policy.effectiveFreeBytes !== null) {
-      if (bytes > policy.effectiveFreeBytes)
+      const otherReservations = Math.max(0, this.pendingUploadBytes - ownReservation);
+      if (bytes + otherReservations > policy.effectiveFreeBytes)
         throw new HttpError(507, 'INSUFFICIENT_STORAGE', 'Espaço insuficiente para o upload.');
       return;
     }
-    if (!this.diskHasSpace(bytes))
+    const additionalBytes = Math.max(0, bytes - ownReservation);
+    if (additionalBytes && !this.diskHasSpace(additionalBytes))
       throw new HttpError(507, 'INSUFFICIENT_STORAGE', 'Espaço insuficiente para o upload.');
+  }
+
+  reserveUploadBytes(bytes, policy, currentReservation) {
+    if (bytes <= currentReservation) return currentReservation;
+    this.assertStorageAvailable(bytes, policy, currentReservation);
+    this.pendingUploadBytes += bytes - currentReservation;
+    return bytes;
   }
 
   async upload(stream, { originalName, mimeType, contentLength, folderId = null }) {
@@ -328,12 +342,11 @@ export class FileService {
         'FILE_TOO_LARGE',
         'O arquivo excede o limite permitido.'
       );
-    if (Number.isSafeInteger(declaredLength) && declaredLength > 0)
-      this.assertStorageAvailable(declaredLength, policy);
 
     const storageName = randomUUID();
     const temporaryPath = join(this.tempDir, storageName);
     const destinationPath = join(this.filesDir, storageName);
+    let reservation = 0;
     let sizeBytes = 0;
     const counter = new Transform({
       transform: (chunk, _encoding, callback) => {
@@ -345,7 +358,7 @@ export class FileService {
           return;
         }
         try {
-          this.assertStorageAvailable(sizeBytes, policy);
+          reservation = this.reserveUploadBytes(sizeBytes, policy, reservation);
           callback(null, chunk);
         } catch (error) {
           callback(error);
@@ -353,6 +366,8 @@ export class FileService {
       }
     });
     try {
+      if (Number.isSafeInteger(declaredLength) && declaredLength > 0)
+        reservation = this.reserveUploadBytes(declaredLength, policy, reservation);
       await pipeline(
         stream,
         counter,
@@ -388,6 +403,8 @@ export class FileService {
           'Espaço insuficiente para o upload.'
         );
       throw error;
+    } finally {
+      this.pendingUploadBytes = Math.max(0, this.pendingUploadBytes - reservation);
     }
   }
 
