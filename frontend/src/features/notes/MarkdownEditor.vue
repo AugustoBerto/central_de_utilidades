@@ -12,11 +12,12 @@ const props = defineProps({
   modelValue: { type: String, default: '' },
   ariaLabel: { type: String, default: 'Editor Markdown' }
 });
-const emit = defineEmits(['update:modelValue', 'save']);
+const emit = defineEmits(['update:modelValue', 'save', 'contextmenu', 'selection-change']);
 
 const host = ref(null);
 let view;
 let applyingExternalValue = false;
+let lastSelectionState = false;
 
 const codeLanguages = [
   LanguageDescription.of({ name: 'JavaScript', alias: ['js', 'javascript', 'jsx'], support: javascript({ jsx: true }) }),
@@ -72,6 +73,21 @@ function currentSelection() {
   return view?.state.selection.main;
 }
 
+function notifySelection() {
+  const selection = currentSelection();
+  const hasSelection = Boolean(selection && !selection.empty);
+  if (hasSelection === lastSelectionState) return;
+  lastSelectionState = hasSelection;
+  emit('selection-change', hasSelection);
+}
+
+function openContextMenu(x, y) {
+  const selection = currentSelection();
+  if (!selection || selection.empty) return false;
+  emit('contextmenu', { x, y });
+  return true;
+}
+
 function replaceSelection(before, after = before, placeholder = 'texto') {
   if (!view) return;
   const selection = currentSelection();
@@ -103,6 +119,14 @@ function focus() {
 }
 
 function handleShortcut(event) {
+  if (event.shiftKey && event.key === 'F10') {
+    const selection = currentSelection();
+    if (!selection || selection.empty) return false;
+    event.preventDefault();
+    const coordinates = view.coordsAtPos(selection.head) ?? view.dom.getBoundingClientRect();
+    openContextMenu(coordinates.left, coordinates.bottom ?? coordinates.top);
+    return true;
+  }
   if (!(event.ctrlKey || event.metaKey)) return false;
   const key = event.key.toLowerCase();
   if (key === 's') { event.preventDefault(); emit('save'); return true; }
@@ -110,6 +134,12 @@ function handleShortcut(event) {
   if (key === 'i') { event.preventDefault(); replaceSelection('*'); return true; }
   if (key === 'k') { event.preventDefault(); replaceSelection('[', '](https://)', 'texto do link'); return true; }
   return false;
+}
+
+function handleContextMenu(event) {
+  if (!openContextMenu(event.clientX, event.clientY)) return false;
+  event.preventDefault();
+  return true;
 }
 
 onMounted(() => {
@@ -123,13 +153,15 @@ onMounted(() => {
       editorTheme,
       EditorView.lineWrapping,
       EditorView.contentAttributes.of({ 'aria-label': props.ariaLabel }),
-      EditorView.domEventHandlers({ keydown: handleShortcut }),
+      EditorView.domEventHandlers({ keydown: handleShortcut, contextmenu: handleContextMenu }),
       EditorView.updateListener.of((update) => {
+        if (update.selectionSet) notifySelection();
         if (!update.docChanged || applyingExternalValue) return;
         emit('update:modelValue', update.state.doc.toString());
       })
     ]
   });
+  notifySelection();
 });
 
 watch(() => props.modelValue, (value) => {
