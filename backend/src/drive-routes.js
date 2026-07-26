@@ -32,7 +32,9 @@ export function registerDriveRoutes(
     requireCsrf,
     (request, response, next) => {
       try {
-        const settings = driveSettingsService.update(request.body ?? {});
+        const settings = driveSettingsService.update(request.body ?? {}, {
+          pendingBytes: fileService.pendingBytes()
+        });
         response.json({ settings, status: driveSettingsService.status() });
       } catch (error) {
         next(error);
