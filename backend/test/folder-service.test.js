@@ -53,6 +53,31 @@ describe('FolderService', () => {
     });
   });
 
+  it('retorna a árvore completa com profundidade e caminho para seletores', () => {
+    const { service } = setup();
+    const projects = service.create({ name: 'Projetos' });
+    service.create({ name: '2026', parentId: projects.id });
+    service.create({ name: 'Documentos' });
+
+    expect(service.tree()).toEqual([
+      expect.objectContaining({
+        name: 'Documentos',
+        path: 'Documentos',
+        depth: 0
+      }),
+      expect.objectContaining({
+        name: 'Projetos',
+        path: 'Projetos',
+        depth: 0
+      }),
+      expect.objectContaining({
+        name: '2026',
+        path: 'Projetos / 2026',
+        depth: 1
+      })
+    ]);
+  });
+
   it('bloqueia nomes duplicados e ciclos na hierarquia', () => {
     const { service } = setup();
     const root = service.create({ name: 'Documentos' });
