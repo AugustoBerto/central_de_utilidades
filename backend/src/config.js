@@ -20,6 +20,7 @@ export function loadConfig(environment = process.env) {
     port: integer(environment.PORT, 3000),
     databasePath: environment.DATABASE_PATH ?? './data/app.sqlite',
     filesDir: environment.FILES_DIR ?? './data/files',
+    driveReservedBytes: integer(environment.DRIVE_RESERVED_BYTES, 53_687_091_200),
     maxUploadBytes: integer(environment.MAX_UPLOAD_BYTES, 2_147_483_648),
     allowHttpShortcuts: environment.ALLOW_HTTP_SHORTCUTS === 'true',
     automationsEnabled: environment.AUTOMATIONS_ENABLED === 'true',
