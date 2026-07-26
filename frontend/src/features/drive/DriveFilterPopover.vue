@@ -3,7 +3,7 @@ import { X } from 'lucide-vue-next';
 
 import AppButton from '@/components/base/AppButton.vue';
 
-const props = defineProps({
+defineProps({
   open: { type: Boolean, default: false },
   filters: { type: Object, required: true },
   activeCount: { type: Number, default: 0 }
