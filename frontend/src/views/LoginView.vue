@@ -13,10 +13,6 @@ const error = ref('');
 const showPassword = ref(false);
 const setupResult = ref(null);
 const useRecoveryCode = ref(false);
-const clientMetadata = ref({
-  userAgent: navigator.userAgent,
-  ipAddress: ''
-});
 const form = ref({
   bootstrapToken: '',
   username: '',
@@ -26,20 +22,7 @@ const form = ref({
 });
 const isSetup = computed(() => auth.setupRequired && !setupResult.value);
 
-async function loadInitialState() {
-  await auth.restore();
-  try {
-    const response = await fetch('/api/health', {
-      cache: 'no-store',
-      credentials: 'same-origin'
-    });
-    clientMetadata.value.ipAddress = response.headers.get('x-client-ip') ?? '';
-  } catch {
-    // Em desenvolvimento local o proxy pode não fornecer o IP. O login segue normalmente.
-  }
-}
-
-onMounted(loadInitialState);
+onMounted(() => auth.restore());
 
 async function submit() {
   loading.value = true;
@@ -57,9 +40,7 @@ async function submit() {
       username: form.value.username,
       password: form.value.password,
       totpCode: useRecoveryCode.value ? undefined : form.value.totpCode,
-      recoveryCode: useRecoveryCode.value ? form.value.recoveryCode : undefined,
-      userAgent: clientMetadata.value.userAgent,
-      ipAddress: clientMetadata.value.ipAddress || undefined
+      recoveryCode: useRecoveryCode.value ? form.value.recoveryCode : undefined
     });
     await router.replace({ name: 'dashboard' });
   } catch (requestError) {

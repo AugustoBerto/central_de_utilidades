@@ -104,7 +104,8 @@ function prefixLines(prefix) {
   if (!view) return;
   const selection = currentSelection();
   const startLine = view.state.doc.lineAt(selection.from);
-  const endLine = view.state.doc.lineAt(selection.to);
+  const endPosition = selection.to > selection.from ? selection.to - 1 : selection.to;
+  const endLine = view.state.doc.lineAt(endPosition);
   const original = view.state.sliceDoc(startLine.from, endLine.to);
   const replacement = original.split('\n').map((line) => `${prefix}${line}`).join('\n');
   view.dispatch({

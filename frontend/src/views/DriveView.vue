@@ -13,6 +13,7 @@ import { onBeforeUnmount, onMounted, ref, watch } from 'vue';
 
 import AppButton from '@/components/base/AppButton.vue';
 import AppShell from '@/components/layout/AppShell.vue';
+import { useConfirm } from '@/composables/useConfirm';
 import ImagePreviewModal from '@/features/drive/ImagePreviewModal.vue';
 import { formatBytes } from '@/features/dashboard/format';
 import { api } from '@/services/api';
@@ -20,6 +21,7 @@ import { useAuthStore } from '@/stores/auth';
 
 const MAX_UPLOAD_BYTES = 2_147_483_648;
 const auth = useAuthStore();
+const { confirm } = useConfirm();
 const files = ref([]);
 const queue = ref([]);
 const query = ref('');
@@ -130,10 +132,15 @@ function retry(item) {
 }
 
 async function remove(file) {
-  if (
-    !window.confirm(`Excluir “${file.originalName}”? Esta ação não pode ser desfeita.`)
-  )
-    return;
+  const accepted = await confirm({
+    title: 'Excluir arquivo?',
+    message: `“${file.originalName}” será excluído permanentemente.`,
+    confirmLabel: 'Excluir',
+    cancelLabel: 'Cancelar',
+    variant: 'danger'
+  });
+  if (!accepted) return;
+
   error.value = '';
   try {
     await api(`/api/files/${file.id}`, {

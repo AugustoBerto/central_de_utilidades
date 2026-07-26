@@ -4,19 +4,19 @@ import {
   HardDrive,
   MemoryStick,
   Network,
-  RefreshCcw,
   Server,
   Timer
 } from 'lucide-vue-next';
 import { computed, onBeforeUnmount, onMounted, ref, shallowRef, watch } from 'vue';
 
-import AppButton from '@/components/base/AppButton.vue';
 import AppShell from '@/components/layout/AppShell.vue';
 import { useTheme } from '@/composables/useTheme';
 import { formatBytes, formatPercent, formatUptime } from '@/features/dashboard/format';
 import { api } from '@/services/api';
 
-const POLL_INTERVAL_MS = 15_000;
+const DEFAULT_POLL_INTERVAL_MS = 15_000;
+const MIN_POLL_INTERVAL_MS = 5_000;
+const SAMPLES_PER_REFRESH = 3;
 const RENDER_LIMITS = { '1h': 240, '6h': 360, '24h': 480 };
 const metrics = ref(null);
 const history = ref([]);
@@ -29,6 +29,8 @@ const stale = ref(false);
 const LineChart = shallowRef(null);
 const { resolvedTheme } = useTheme();
 let timer;
+let refreshController;
+let active = true;
 
 const statusLabel = computed(() => {
   const labels = {
@@ -307,12 +309,27 @@ async function loadChart() {
   LineChart.value = Line;
 }
 
+function refreshIntervalMs() {
+  const samplingSeconds = Number(metrics.value?.samplingIntervalSeconds);
+  if (!Number.isFinite(samplingSeconds) || samplingSeconds <= 0)
+    return DEFAULT_POLL_INTERVAL_MS;
+  return Math.max(
+    MIN_POLL_INTERVAL_MS,
+    Math.round(samplingSeconds * 1_000 * SAMPLES_PER_REFRESH)
+  );
+}
+
 async function refresh() {
-  if (refreshing.value) return;
+  refreshController?.abort();
+  const controller = new AbortController();
+  refreshController = controller;
   refreshing.value = true;
   error.value = '';
   try {
-    const next = await api(`/api/system/metrics?range=${range.value}`);
+    const next = await api(`/api/system/metrics?range=${range.value}`, {
+      signal: controller.signal
+    });
+    if (controller.signal.aborted || !active) return;
     metrics.value = next;
     stale.value = false;
     if (next.metrics) {
@@ -320,33 +337,55 @@ async function refresh() {
       await loadChart();
     }
   } catch (caught) {
+    if (caught.name === 'AbortError') return;
     stale.value = Boolean(metrics.value);
     error.value = caught.message;
   } finally {
-    loading.value = false;
-    refreshing.value = false;
+    if (refreshController === controller) {
+      refreshController = null;
+      loading.value = false;
+      refreshing.value = false;
+    }
   }
 }
 
-function schedule() {
-  window.clearInterval(timer);
-  if (!document.hidden) timer = window.setInterval(refresh, POLL_INTERVAL_MS);
+function scheduleNextRefresh() {
+  window.clearTimeout(timer);
+  if (!active || document.hidden) return;
+  timer = window.setTimeout(async () => {
+    await refresh();
+    scheduleNextRefresh();
+  }, refreshIntervalMs());
+}
+
+async function refreshAndSchedule() {
+  await refresh();
+  scheduleNextRefresh();
 }
 
 function onVisibilityChange() {
-  schedule();
-  if (!document.hidden) refresh();
+  window.clearTimeout(timer);
+  if (document.hidden) {
+    refreshController?.abort();
+    return;
+  }
+  void refreshAndSchedule();
 }
 
 onMounted(() => {
-  refresh();
-  schedule();
+  active = true;
   document.addEventListener('visibilitychange', onVisibilityChange);
+  void refreshAndSchedule();
 });
-watch(range, refresh);
+watch(range, () => {
+  window.clearTimeout(timer);
+  void refreshAndSchedule();
+});
 watch(scaleMode, (value) => localStorage.setItem('dashboard-chart-scale', value));
 onBeforeUnmount(() => {
-  window.clearInterval(timer);
+  active = false;
+  window.clearTimeout(timer);
+  refreshController?.abort();
   document.removeEventListener('visibilitychange', onVisibilityChange);
 });
 </script>
@@ -364,16 +403,13 @@ onBeforeUnmount(() => {
             <p class="mt-1 text-sm text-muted">Origem: {{ sourceLabel }}.</p>
           </div>
         </div>
-        <div class="flex items-center gap-3">
-          <span class="inline-flex items-center gap-2 text-sm"
-            ><span class="size-2 rounded-full" :class="statusClass" />{{
-              statusLabel
-            }}</span
-          >
-          <AppButton variant="secondary" :loading="refreshing" @click="refresh"
-            ><RefreshCcw :size="16" aria-hidden="true" />Atualizar</AppButton
-          >
-        </div>
+        <span
+          class="inline-flex items-center gap-2 text-sm"
+          aria-live="polite"
+          title="As métricas são atualizadas automaticamente"
+        >
+          <span class="size-2 rounded-full" :class="statusClass" />{{ statusLabel }}
+        </span>
       </div>
 
       <p

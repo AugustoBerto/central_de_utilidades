@@ -1,6 +1,6 @@
 <script setup>
 import { BookOpen, Folder, Globe, Link as LinkIcon, Server, Shield, Terminal, Zap } from 'lucide-vue-next';
-import { onBeforeUnmount, onMounted, ref } from 'vue';
+import { nextTick, onBeforeUnmount, onMounted, ref } from 'vue';
 
 import { api } from '@/services/api';
 import { useAuthStore } from '@/stores/auth';
@@ -8,6 +8,7 @@ import { useAuthStore } from '@/stores/auth';
 const SLOT_COUNT = 5;
 const auth = useAuthStore();
 const slots = ref(Array(SLOT_COUNT).fill(null));
+const shortcutButtons = ref([]);
 const draggingSlot = ref(null);
 const dropTarget = ref(null);
 const saving = ref(false);
@@ -28,6 +29,10 @@ const icons = {
 
 function emptySlots() {
   return Array(SLOT_COUNT).fill(null);
+}
+
+function setShortcutButton(element, slot) {
+  shortcutButtons.value[slot] = element;
 }
 
 async function load() {
@@ -63,20 +68,25 @@ async function persist(next, previous) {
       body: { slots: next.map((shortcut) => shortcut?.id ?? null) }
     });
     window.dispatchEvent(new Event('shortcuts:layout-changed'));
+    return true;
   } catch (caught) {
     slots.value = previous;
     showError(caught.message || 'Não foi possível salvar a posição dos atalhos.');
+    return false;
   } finally {
     saving.value = false;
   }
 }
 
-function moveSlot(source, target) {
+async function moveSlot(source, target, { restoreFocus = false } = {}) {
   if (saving.value || source === target || source === null || target === null) return;
   const previous = [...slots.value];
   const next = [...slots.value];
   [next[source], next[target]] = [next[target], next[source]];
-  persist(next, previous);
+  const saved = await persist(next, previous);
+  if (!restoreFocus) return;
+  await nextTick();
+  shortcutButtons.value[saved ? target : source]?.focus?.();
 }
 
 function startDrag(event, slot) {
@@ -101,7 +111,7 @@ function dropOnSlot(event, slot) {
   draggingSlot.value = null;
   dropTarget.value = null;
   suppressClickUntil = Date.now() + 250;
-  moveSlot(source, slot);
+  void moveSlot(source, slot);
 }
 
 function endDrag() {
@@ -122,11 +132,11 @@ function onShortcutKeydown(event, slot) {
   if (!event.altKey) return;
   if (event.key === 'ArrowLeft' && slot > 0) {
     event.preventDefault();
-    moveSlot(slot, slot - 1);
+    void moveSlot(slot, slot - 1, { restoreFocus: true });
   }
   if (event.key === 'ArrowRight' && slot < SLOT_COUNT - 1) {
     event.preventDefault();
-    moveSlot(slot, slot + 1);
+    void moveSlot(slot, slot + 1, { restoreFocus: true });
   }
 }
 
@@ -162,6 +172,7 @@ onBeforeUnmount(() => {
       >
         <button
           v-if="shortcut"
+          :ref="(element) => setShortcutButton(element, slot)"
           type="button"
           draggable="true"
           class="flex h-full w-full cursor-grab items-center justify-center gap-2 overflow-hidden rounded-md px-2 text-sm text-muted hover:bg-elevated hover:text-foreground active:cursor-grabbing"
