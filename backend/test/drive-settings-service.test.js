@@ -73,7 +73,7 @@ describe('DriveSettingsService', () => {
     });
   });
 
-  it('valida alterações de cota e limite por arquivo', () => {
+  it('valida alterações de cota, uploads pendentes e limite por arquivo', () => {
     const { service } = setup({ usedBytes: 250 });
 
     expect(service.update({ reservedBytes: 800, maxUploadBytes: 200 })).toMatchObject({
@@ -81,6 +81,12 @@ describe('DriveSettingsService', () => {
       maxUploadBytes: 200
     });
     expect(caught(() => service.update({ reservedBytes: 200 }))).toMatchObject({
+      status: 422,
+      code: 'DRIVE_QUOTA_BELOW_USAGE'
+    });
+    expect(
+      caught(() => service.update({ reservedBytes: 300 }, { pendingBytes: 100 }))
+    ).toMatchObject({
       status: 422,
       code: 'DRIVE_QUOTA_BELOW_USAGE'
     });
