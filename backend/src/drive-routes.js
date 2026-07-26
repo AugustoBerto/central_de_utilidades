@@ -1,3 +1,5 @@
+import { DriveItemsService } from './drive-items-service.js';
+
 export function registerDriveRoutes(
   app,
   {
@@ -10,6 +12,12 @@ export function registerDriveRoutes(
     requireSameOrigin
   }
 ) {
+  const itemsService = driveItemsService ?? new DriveItemsService(fileService.database, {
+    filesDir: fileService.filesDir,
+    fileService,
+    folderService
+  });
+
   app.get('/api/drive/status', requireAuth, (_request, response, next) => {
     try {
       response.json(driveSettingsService.status());
@@ -46,7 +54,7 @@ export function registerDriveRoutes(
   app.get('/api/drive/items', requireAuth, (request, response, next) => {
     try {
       response.json(
-        driveItemsService.list({
+        itemsService.list({
           folderId: request.query.folderId,
           query: request.query.q,
           scope: request.query.scope,
@@ -73,7 +81,7 @@ export function registerDriveRoutes(
     requireCsrf,
     (request, response, next) => {
       try {
-        response.json(driveItemsService.move(request.body ?? {}));
+        response.json(itemsService.move(request.body ?? {}));
       } catch (error) {
         next(error);
       }
@@ -87,7 +95,7 @@ export function registerDriveRoutes(
     requireCsrf,
     async (request, response, next) => {
       try {
-        response.json(await driveItemsService.remove(request.body ?? {}));
+        response.json(await itemsService.remove(request.body ?? {}));
       } catch (error) {
         next(error);
       }
