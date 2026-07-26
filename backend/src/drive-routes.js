@@ -12,11 +12,15 @@ export function registerDriveRoutes(
     requireSameOrigin
   }
 ) {
-  const itemsService = driveItemsService ?? new DriveItemsService(fileService.database, {
-    filesDir: fileService.filesDir,
-    fileService,
-    folderService
-  });
+  const itemsService = driveItemsService ?? (
+    fileService && folderService
+      ? new DriveItemsService(fileService.database, {
+          filesDir: fileService.filesDir,
+          fileService,
+          folderService
+        })
+      : null
+  );
 
   app.get('/api/drive/status', requireAuth, (_request, response, next) => {
     try {
