@@ -2,7 +2,6 @@ import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
-import { generate } from 'otplib';
 import request from 'supertest';
 import { afterEach, describe, expect, it } from 'vitest';
 
@@ -65,15 +64,15 @@ async function login(app) {
       username: 'admin',
       password: 'uma-senha-forte-de-teste'
     });
-  const secret = new URL(setup.body.totpUri).searchParams.get('secret');
   const response = await request(app)
     .post('/api/auth/login')
     .set('Origin', sameOrigin)
     .send({
       username: 'admin',
       password: 'uma-senha-forte-de-teste',
-      totpCode: await generate({ secret })
+      recoveryCode: setup.body.recoveryCodes[0]
     });
+  expect(response.status).toBe(200);
   return {
     cookie: response.headers['set-cookie'][0],
     csrfToken: response.body.csrfToken
