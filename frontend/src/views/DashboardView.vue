@@ -4,19 +4,19 @@ import {
   HardDrive,
   MemoryStick,
   Network,
-  RefreshCcw,
   Server,
   Timer
 } from 'lucide-vue-next';
 import { computed, onBeforeUnmount, onMounted, ref, shallowRef, watch } from 'vue';
 
-import AppButton from '@/components/base/AppButton.vue';
 import AppShell from '@/components/layout/AppShell.vue';
 import { useTheme } from '@/composables/useTheme';
 import { formatBytes, formatPercent, formatUptime } from '@/features/dashboard/format';
 import { api } from '@/services/api';
 
-const POLL_INTERVAL_MS = 15_000;
+const DEFAULT_POLL_INTERVAL_MS = 15_000;
+const MIN_POLL_INTERVAL_MS = 5_000;
+const SAMPLES_PER_REFRESH = 3;
 const RENDER_LIMITS = { '1h': 240, '6h': 360, '24h': 480 };
 const metrics = ref(null);
 const history = ref([]);
@@ -307,6 +307,16 @@ async function loadChart() {
   LineChart.value = Line;
 }
 
+function refreshIntervalMs() {
+  const samplingSeconds = Number(metrics.value?.samplingIntervalSeconds);
+  if (!Number.isFinite(samplingSeconds) || samplingSeconds <= 0)
+    return DEFAULT_POLL_INTERVAL_MS;
+  return Math.max(
+    MIN_POLL_INTERVAL_MS,
+    Math.round(samplingSeconds * 1_000 * SAMPLES_PER_REFRESH)
+  );
+}
+
 async function refresh() {
   if (refreshing.value) return;
   refreshing.value = true;
@@ -328,25 +338,36 @@ async function refresh() {
   }
 }
 
-function schedule() {
-  window.clearInterval(timer);
-  if (!document.hidden) timer = window.setInterval(refresh, POLL_INTERVAL_MS);
+function scheduleNextRefresh() {
+  window.clearTimeout(timer);
+  if (document.hidden) return;
+  timer = window.setTimeout(async () => {
+    await refresh();
+    scheduleNextRefresh();
+  }, refreshIntervalMs());
+}
+
+async function refreshAndSchedule() {
+  await refresh();
+  scheduleNextRefresh();
 }
 
 function onVisibilityChange() {
-  schedule();
-  if (!document.hidden) refresh();
+  window.clearTimeout(timer);
+  if (!document.hidden) void refreshAndSchedule();
 }
 
 onMounted(() => {
-  refresh();
-  schedule();
   document.addEventListener('visibilitychange', onVisibilityChange);
+  void refreshAndSchedule();
 });
-watch(range, refresh);
+watch(range, () => {
+  window.clearTimeout(timer);
+  void refreshAndSchedule();
+});
 watch(scaleMode, (value) => localStorage.setItem('dashboard-chart-scale', value));
 onBeforeUnmount(() => {
-  window.clearInterval(timer);
+  window.clearTimeout(timer);
   document.removeEventListener('visibilitychange', onVisibilityChange);
 });
 </script>
@@ -364,16 +385,13 @@ onBeforeUnmount(() => {
             <p class="mt-1 text-sm text-muted">Origem: {{ sourceLabel }}.</p>
           </div>
         </div>
-        <div class="flex items-center gap-3">
-          <span class="inline-flex items-center gap-2 text-sm"
-            ><span class="size-2 rounded-full" :class="statusClass" />{{
-              statusLabel
-            }}</span
-          >
-          <AppButton variant="secondary" :loading="refreshing" @click="refresh"
-            ><RefreshCcw :size="16" aria-hidden="true" />Atualizar</AppButton
-          >
-        </div>
+        <span
+          class="inline-flex items-center gap-2 text-sm"
+          aria-live="polite"
+          title="As métricas são atualizadas automaticamente"
+        >
+          <span class="size-2 rounded-full" :class="statusClass" />{{ statusLabel }}
+        </span>
       </div>
 
       <p
