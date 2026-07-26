@@ -26,6 +26,7 @@
   --code-string: 165 214 255;
   --code-number: 121 192 255;
   --code-property: 210 168 255;
+  --code-shadow: 0 8px 20px rgb(0 0 0 / .16);
   --selection: 38 79 120;
   color: rgb(var(--color-foreground));
   background: rgb(var(--color-canvas));
@@ -54,6 +55,7 @@
   --code-string: 10 48 105;
   --code-number: 5 80 174;
   --code-property: 130 80 223;
+  --code-shadow: 0 3px 10px rgb(31 35 40 / .07);
   --selection: 180 215 255;
   color: rgb(var(--color-foreground));
   background: rgb(var(--color-canvas));
@@ -155,7 +157,7 @@ body { margin: 0; background: rgb(var(--color-canvas)); color: rgb(var(--color-f
   border: 1px solid rgb(var(--color-border));
   border-radius: .7rem;
   background: rgb(var(--code-surface));
-  box-shadow: 0 12px 30px rgb(0 0 0 / .14);
+  box-shadow: var(--code-shadow);
 }
 .note-code-block > header {
   display: flex;
