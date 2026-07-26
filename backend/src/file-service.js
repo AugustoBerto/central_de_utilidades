@@ -67,7 +67,7 @@ export class FileService {
   constructor(database, { filesDir, maxUploadBytes, driveSettingsService = null }) {
     this.database = database;
     this.filesDir = resolve(filesDir);
-    this.tempDir = join(filesDir, '.tmp');
+    this.tempDir = join(this.filesDir, '.tmp');
     this.maxUploadBytes = maxUploadBytes;
     this.driveSettingsService = driveSettingsService;
     mkdirSync(this.tempDir, { recursive: true });
@@ -108,8 +108,11 @@ export class FileService {
     return file;
   }
 
-  uploadLimit() {
-    return this.driveSettingsService?.get().maxUploadBytes ?? this.maxUploadBytes;
+  uploadPolicy() {
+    return this.driveSettingsService?.status() ?? {
+      maxUploadBytes: this.maxUploadBytes,
+      effectiveFreeBytes: null
+    };
   }
 
   diskHasSpace(bytes) {
@@ -121,9 +124,10 @@ export class FileService {
     }
   }
 
-  assertStorageAvailable(bytes) {
-    if (this.driveSettingsService) {
-      this.driveSettingsService.assertUploadAllowed(bytes);
+  assertStorageAvailable(bytes, policy) {
+    if (policy.effectiveFreeBytes !== null) {
+      if (bytes > policy.effectiveFreeBytes)
+        throw new HttpError(507, 'INSUFFICIENT_STORAGE', 'Espaço insuficiente para o upload.');
       return;
     }
     if (!this.diskHasSpace(bytes))
@@ -132,15 +136,16 @@ export class FileService {
 
   async upload(stream, { originalName, mimeType, contentLength }) {
     const name = validateOriginalName(originalName);
+    const policy = this.uploadPolicy();
     const declaredLength = Number.parseInt(contentLength, 10);
-    if (Number.isSafeInteger(declaredLength) && declaredLength > this.uploadLimit())
+    if (Number.isSafeInteger(declaredLength) && declaredLength > policy.maxUploadBytes)
       throw new HttpError(
         413,
         'FILE_TOO_LARGE',
         'O arquivo excede o limite permitido.'
       );
     if (Number.isSafeInteger(declaredLength) && declaredLength > 0)
-      this.assertStorageAvailable(declaredLength);
+      this.assertStorageAvailable(declaredLength, policy);
 
     const storageName = randomUUID();
     const temporaryPath = join(this.tempDir, storageName);
@@ -149,14 +154,14 @@ export class FileService {
     const counter = new Transform({
       transform: (chunk, _encoding, callback) => {
         sizeBytes += chunk.length;
-        if (sizeBytes > this.uploadLimit()) {
+        if (sizeBytes > policy.maxUploadBytes) {
           callback(
             new HttpError(413, 'FILE_TOO_LARGE', 'O arquivo excede o limite permitido.')
           );
           return;
         }
         try {
-          this.assertStorageAvailable(sizeBytes);
+          this.assertStorageAvailable(sizeBytes, policy);
           callback(null, chunk);
         } catch (error) {
           callback(error);
