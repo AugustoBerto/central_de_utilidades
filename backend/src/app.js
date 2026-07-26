@@ -58,7 +58,7 @@ export function createApp({
   const authRateLimit = createRateLimiter();
 
   app.disable('x-powered-by');
-  app.set('trust proxy', config.trustProxyHops);
+  app.set('trust proxy', config.trustProxyHops ?? false);
   app.use(
     helmet({ contentSecurityPolicy: environment === 'production' ? undefined : false })
   );
