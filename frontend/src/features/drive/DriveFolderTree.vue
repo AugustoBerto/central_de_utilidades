@@ -1,7 +1,7 @@
 <script setup>
 import { Folder, Home, X } from 'lucide-vue-next';
 
-const props = defineProps({
+defineProps({
   open: { type: Boolean, default: false },
   folders: { type: Array, required: true },
   currentFolderId: { type: Number, default: null },
