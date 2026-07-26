@@ -5,7 +5,6 @@ on:
   push:
     branches:
       - master
-      - merge/ux-session-device-details
 
 permissions:
   contents: read
