@@ -29,6 +29,8 @@ const stale = ref(false);
 const LineChart = shallowRef(null);
 const { resolvedTheme } = useTheme();
 let timer;
+let refreshController;
+let active = true;
 
 const statusLabel = computed(() => {
   const labels = {
@@ -318,11 +320,16 @@ function refreshIntervalMs() {
 }
 
 async function refresh() {
-  if (refreshing.value) return;
+  refreshController?.abort();
+  const controller = new AbortController();
+  refreshController = controller;
   refreshing.value = true;
   error.value = '';
   try {
-    const next = await api(`/api/system/metrics?range=${range.value}`);
+    const next = await api(`/api/system/metrics?range=${range.value}`, {
+      signal: controller.signal
+    });
+    if (controller.signal.aborted || !active) return;
     metrics.value = next;
     stale.value = false;
     if (next.metrics) {
@@ -330,17 +337,21 @@ async function refresh() {
       await loadChart();
     }
   } catch (caught) {
+    if (caught.name === 'AbortError') return;
     stale.value = Boolean(metrics.value);
     error.value = caught.message;
   } finally {
-    loading.value = false;
-    refreshing.value = false;
+    if (refreshController === controller) {
+      refreshController = null;
+      loading.value = false;
+      refreshing.value = false;
+    }
   }
 }
 
 function scheduleNextRefresh() {
   window.clearTimeout(timer);
-  if (document.hidden) return;
+  if (!active || document.hidden) return;
   timer = window.setTimeout(async () => {
     await refresh();
     scheduleNextRefresh();
@@ -354,10 +365,15 @@ async function refreshAndSchedule() {
 
 function onVisibilityChange() {
   window.clearTimeout(timer);
-  if (!document.hidden) void refreshAndSchedule();
+  if (document.hidden) {
+    refreshController?.abort();
+    return;
+  }
+  void refreshAndSchedule();
 }
 
 onMounted(() => {
+  active = true;
   document.addEventListener('visibilitychange', onVisibilityChange);
   void refreshAndSchedule();
 });
@@ -367,7 +383,9 @@ watch(range, () => {
 });
 watch(scaleMode, (value) => localStorage.setItem('dashboard-chart-scale', value));
 onBeforeUnmount(() => {
+  active = false;
   window.clearTimeout(timer);
+  refreshController?.abort();
   document.removeEventListener('visibilitychange', onVisibilityChange);
 });
 </script>
