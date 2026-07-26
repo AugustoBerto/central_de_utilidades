@@ -1,26 +1,19 @@
 <script setup>
 import {
   Activity,
-  BookOpen,
   BookOpenText,
-  Folder,
   FolderOpen,
   Gauge,
-  Globe,
-  Link as LinkIcon,
   Menu,
-  Server,
   Settings,
-  Shield,
-  Terminal,
   TerminalSquare,
   X,
   Zap
 } from 'lucide-vue-next';
-import { computed, onBeforeUnmount, onMounted, ref } from 'vue';
+import { computed } from 'vue';
 import { useRoute } from 'vue-router';
 
-import { api } from '@/services/api';
+import PinnedShortcutBar from '@/features/shortcuts/PinnedShortcutBar.vue';
 import { useAuthStore } from '@/stores/auth';
 import { useUiStore } from '@/stores/ui';
 
@@ -29,17 +22,6 @@ const auth = useAuthStore();
 const ui = useUiStore();
 const title = computed(() => route.meta.title ?? 'Painel de Utilidades');
 const description = computed(() => route.meta.description ?? '');
-const pinnedShortcuts = ref([]);
-const shortcutIcons = {
-  'book-open': BookOpen,
-  folder: Folder,
-  globe: Globe,
-  link: LinkIcon,
-  server: Server,
-  shield: Shield,
-  terminal: Terminal,
-  zap: Zap
-};
 const items = computed(() => [
   { label: 'Visão geral', to: '/dashboard', icon: Gauge },
   { label: 'Notas rápidas', to: '/notes', icon: BookOpenText },
@@ -53,21 +35,6 @@ const items = computed(() => [
 function closeMobileNavigation() {
   ui.closeMobileNavigation();
 }
-
-async function loadPinnedShortcuts() {
-  if (!auth.authenticated) return;
-  try {
-    pinnedShortcuts.value = (await api('/api/shortcuts/pinned')).shortcuts;
-  } catch {
-    pinnedShortcuts.value = [];
-  }
-}
-
-onMounted(() => {
-  loadPinnedShortcuts();
-  window.addEventListener('shortcuts:changed', loadPinnedShortcuts);
-});
-onBeforeUnmount(() => window.removeEventListener('shortcuts:changed', loadPinnedShortcuts));
 </script>
 
 <template>
@@ -136,9 +103,9 @@ onBeforeUnmount(() => window.removeEventListener('shortcuts:changed', loadPinned
       :class="{ 'lg:pl-20': ui.sidebarCollapsed }"
     >
       <header
-        class="sticky top-0 z-20 flex min-h-16 items-center gap-3 overflow-hidden border-b border-border bg-canvas/95 px-4 backdrop-blur sm:px-6"
+        class="sticky top-0 z-20 flex min-h-16 items-center gap-3 overflow-visible border-b border-border bg-canvas/95 px-4 backdrop-blur sm:px-6"
       >
-        <div class="flex min-w-0 flex-1 items-center gap-3">
+        <div class="flex min-w-0 flex-1 items-center gap-3 overflow-hidden">
           <button
             class="rounded-md p-2 text-muted hover:bg-elevated hover:text-foreground lg:hidden"
             type="button"
@@ -154,24 +121,7 @@ onBeforeUnmount(() => window.removeEventListener('shortcuts:changed', loadPinned
             </p>
           </div>
         </div>
-        <nav
-          v-if="pinnedShortcuts.length"
-          class="hidden shrink-0 items-center justify-end gap-1 md:flex"
-          aria-label="Atalhos fixados"
-        >
-          <a
-            v-for="shortcut in pinnedShortcuts"
-            :key="shortcut.id"
-            :href="shortcut.url"
-            target="_blank"
-            rel="noopener noreferrer"
-            :title="shortcut.label"
-            class="inline-flex min-h-10 max-w-40 items-center gap-2 rounded-md px-3 text-sm text-muted hover:bg-elevated hover:text-foreground focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
-          >
-            <component :is="shortcutIcons[shortcut.iconKey]" :size="17" aria-hidden="true" />
-            <span class="hidden truncate xl:inline">{{ shortcut.label }}</span>
-          </a>
-        </nav>
+        <PinnedShortcutBar />
       </header>
       <main class="mx-auto w-full min-w-0 max-w-7xl px-4 py-6 sm:px-6 lg:px-8">
         <slot />

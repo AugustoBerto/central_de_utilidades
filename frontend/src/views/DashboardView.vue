@@ -12,18 +12,22 @@ import { computed, onBeforeUnmount, onMounted, ref, shallowRef, watch } from 'vu
 
 import AppButton from '@/components/base/AppButton.vue';
 import AppShell from '@/components/layout/AppShell.vue';
+import { useTheme } from '@/composables/useTheme';
 import { formatBytes, formatPercent, formatUptime } from '@/features/dashboard/format';
 import { api } from '@/services/api';
 
 const POLL_INTERVAL_MS = 15_000;
+const RENDER_LIMITS = { '1h': 240, '6h': 360, '24h': 480 };
 const metrics = ref(null);
 const history = ref([]);
 const range = ref('1h');
+const scaleMode = ref(localStorage.getItem('dashboard-chart-scale') === 'fixed' ? 'fixed' : 'auto');
 const loading = ref(true);
 const refreshing = ref(false);
 const error = ref('');
 const stale = ref(false);
 const LineChart = shallowRef(null);
+const { resolvedTheme } = useTheme();
 let timer;
 
 const statusLabel = computed(() => {
@@ -50,6 +54,7 @@ const sourceLabel = computed(() => {
   };
   return labels[metrics.value?.source?.type] ?? 'indisponível';
 });
+
 function formatChartTime(sample) {
   return new Intl.DateTimeFormat('pt-BR', {
     hour: '2-digit',
@@ -58,65 +63,239 @@ function formatChartTime(sample) {
     hourCycle: 'h23'
   }).format(new Date(sample.collectedAt));
 }
+
+function metricValue(sample, type) {
+  const value = type === 'cpu'
+    ? sample.metrics?.cpu?.usagePercent
+    : sample.metrics?.memory?.usedPercent;
+  return Number.isFinite(value) ? value : null;
+}
+
+function downsampleSamples(samples, limit) {
+  if (samples.length <= limit) return samples;
+
+  const interior = samples.slice(1, -1);
+  const bucketCount = Math.max(1, Math.floor((limit - 2) / 4));
+  const bucketSize = interior.length / bucketCount;
+  const selected = [samples[0]];
+
+  for (let bucketIndex = 0; bucketIndex < bucketCount; bucketIndex += 1) {
+    const start = Math.floor(bucketIndex * bucketSize);
+    const end = Math.min(interior.length, Math.max(start + 1, Math.floor((bucketIndex + 1) * bucketSize)));
+    const bucket = interior.slice(start, end);
+    if (!bucket.length) continue;
+
+    const candidates = new Set([0, bucket.length - 1]);
+    for (const type of ['cpu', 'memory']) {
+      let minIndex = -1;
+      let maxIndex = -1;
+      let minValue = Infinity;
+      let maxValue = -Infinity;
+      bucket.forEach((sample, index) => {
+        const value = metricValue(sample, type);
+        if (value === null) return;
+        if (value < minValue) {
+          minValue = value;
+          minIndex = index;
+        }
+        if (value > maxValue) {
+          maxValue = value;
+          maxIndex = index;
+        }
+      });
+      if (minIndex >= 0) candidates.add(minIndex);
+      if (maxIndex >= 0) candidates.add(maxIndex);
+    }
+
+    [...candidates]
+      .sort((left, right) => left - right)
+      .forEach((index) => selected.push(bucket[index]));
+  }
+
+  selected.push(samples.at(-1));
+  return selected;
+}
+
+const chartSamples = computed(() => downsampleSamples(history.value, RENDER_LIMITS[range.value]));
+
+function adaptiveBounds(values, includeZero) {
+  if (scaleMode.value === 'fixed') return { min: 0, max: 100 };
+
+  const valid = values.filter(Number.isFinite);
+  if (!valid.length) return includeZero ? { min: 0, max: 10 } : { min: 0, max: 100 };
+
+  const observedMin = Math.min(...valid);
+  const observedMax = Math.max(...valid);
+  const observedSpan = Math.max(observedMax - observedMin, 1);
+  const padding = Math.max(observedSpan * 0.25, includeZero ? 2 : 1);
+  let min = includeZero ? 0 : Math.max(0, Math.floor((observedMin - padding) / 2) * 2);
+  let max = Math.min(100, Math.ceil((observedMax + padding) / 2) * 2);
+  const minimumSpan = includeZero ? 10 : 8;
+
+  if (max - min < minimumSpan) {
+    if (includeZero) {
+      max = Math.min(100, minimumSpan);
+    } else {
+      const center = (observedMin + observedMax) / 2;
+      min = Math.max(0, Math.floor(center - minimumSpan / 2));
+      max = Math.min(100, min + minimumSpan);
+      if (max - min < minimumSpan) min = Math.max(0, max - minimumSpan);
+    }
+  }
+
+  return { min, max };
+}
+
+function tickStep(bounds) {
+  const span = bounds.max - bounds.min;
+  if (span <= 10) return 2;
+  if (span <= 20) return 5;
+  if (span <= 50) return 10;
+  return 20;
+}
+
+const cpuBounds = computed(() => adaptiveBounds(chartSamples.value.map((sample) => metricValue(sample, 'cpu')), true));
+const memoryBounds = computed(() => adaptiveBounds(chartSamples.value.map((sample) => metricValue(sample, 'memory')), false));
+const chartTheme = computed(() => resolvedTheme.value === 'dark'
+  ? {
+      text: '#8b949e',
+      grid: 'rgba(139, 148, 158, 0.16)',
+      border: 'rgba(139, 148, 158, 0.28)',
+      tooltipBackground: '#161b22',
+      tooltipBorder: '#30363d',
+      tooltipText: '#f0f6fc'
+    }
+  : {
+      text: '#57606a',
+      grid: 'rgba(87, 96, 106, 0.14)',
+      border: 'rgba(87, 96, 106, 0.24)',
+      tooltipBackground: '#ffffff',
+      tooltipBorder: '#d0d7de',
+      tooltipText: '#1f2328'
+    });
+
 const chartData = computed(() => ({
-  labels: history.value.map(formatChartTime),
+  labels: chartSamples.value.map(formatChartTime),
   datasets: [
     {
       label: 'CPU (%)',
-      data: history.value.map((sample) => sample.metrics?.cpu?.usagePercent),
-      borderColor: '#58a6ff',
-      backgroundColor: 'rgba(88, 166, 255, 0.15)',
-      tension: 0.3,
+      data: chartSamples.value.map((sample) => metricValue(sample, 'cpu')),
+      yAxisID: 'cpu',
+      borderColor: '#2f81f7',
+      backgroundColor: resolvedTheme.value === 'dark' ? 'rgba(47, 129, 247, 0.14)' : 'rgba(9, 105, 218, 0.10)',
+      borderWidth: 2,
+      tension: 0.18,
       fill: true,
-      spanGaps: true
+      spanGaps: true,
+      pointRadius: 0,
+      pointHoverRadius: 4,
+      pointHitRadius: 12
     },
     {
       label: 'Memória (%)',
-      data: history.value.map((sample) => sample.metrics?.memory?.usedPercent),
-      borderColor: '#3fb950',
-      backgroundColor: 'rgba(63, 185, 80, 0.1)',
-      tension: 0.3,
+      data: chartSamples.value.map((sample) => metricValue(sample, 'memory')),
+      yAxisID: 'memory',
+      borderColor: '#2da44e',
+      backgroundColor: resolvedTheme.value === 'dark' ? 'rgba(63, 185, 80, 0.10)' : 'rgba(45, 164, 78, 0.08)',
+      borderWidth: 2,
+      tension: 0.18,
       fill: true,
-      spanGaps: true
+      spanGaps: true,
+      pointRadius: 0,
+      pointHoverRadius: 4,
+      pointHitRadius: 12
     }
   ]
 }));
-const chartOptions = {
-  responsive: true,
-  maintainAspectRatio: false,
-  animation: false,
-  plugins: {
-    legend: { labels: { color: '#8b949e' } },
-    tooltip: {
-      callbacks: {
-        title(items) {
-          const sample = history.value[items[0]?.dataIndex];
-          return sample
-            ? new Intl.DateTimeFormat('pt-BR', {
-                year: 'numeric',
-                month: 'short',
-                day: '2-digit',
-                hour: '2-digit',
-                minute: '2-digit',
-                second: '2-digit',
-                hourCycle: 'h23',
-                timeZoneName: 'short'
-              }).format(new Date(sample.collectedAt))
-            : '';
+
+const chartOptions = computed(() => {
+  const colors = chartTheme.value;
+  const cpu = cpuBounds.value;
+  const memory = memoryBounds.value;
+  return {
+    responsive: true,
+    maintainAspectRatio: false,
+    animation: false,
+    resizeDelay: 120,
+    devicePixelRatio: Math.min(window.devicePixelRatio || 1, 2),
+    normalized: true,
+    interaction: { mode: 'index', intersect: false },
+    plugins: {
+      legend: {
+        labels: {
+          color: colors.text,
+          usePointStyle: true,
+          pointStyle: 'line',
+          boxWidth: 18,
+          padding: 18
+        }
+      },
+      tooltip: {
+        backgroundColor: colors.tooltipBackground,
+        borderColor: colors.tooltipBorder,
+        borderWidth: 1,
+        titleColor: colors.tooltipText,
+        bodyColor: colors.tooltipText,
+        displayColors: true,
+        callbacks: {
+          title(items) {
+            const sample = chartSamples.value[items[0]?.dataIndex];
+            return sample
+              ? new Intl.DateTimeFormat('pt-BR', {
+                  year: 'numeric',
+                  month: 'short',
+                  day: '2-digit',
+                  hour: '2-digit',
+                  minute: '2-digit',
+                  second: '2-digit',
+                  hourCycle: 'h23',
+                  timeZoneName: 'short'
+                }).format(new Date(sample.collectedAt))
+              : '';
+          }
         }
       }
+    },
+    scales: {
+      x: {
+        ticks: { color: colors.text, maxTicksLimit: 6, maxRotation: 0 },
+        grid: { display: false },
+        border: { color: colors.border }
+      },
+      cpu: {
+        type: 'linear',
+        position: 'left',
+        min: cpu.min,
+        max: cpu.max,
+        ticks: {
+          color: '#2f81f7',
+          stepSize: tickStep(cpu),
+          callback: (value) => `${value}%`
+        },
+        grid: { color: colors.grid, lineWidth: 1 },
+        border: { color: colors.border }
+      },
+      memory: {
+        type: 'linear',
+        position: 'right',
+        min: memory.min,
+        max: memory.max,
+        ticks: {
+          color: '#2da44e',
+          stepSize: tickStep(memory),
+          callback: (value) => `${value}%`
+        },
+        grid: { drawOnChartArea: false },
+        border: { color: colors.border }
+      }
     }
-  },
-  scales: {
-    x: { ticks: { color: '#8b949e', maxTicksLimit: 6 }, grid: { color: '#21262d' } },
-    y: {
-      min: 0,
-      max: 100,
-      ticks: { color: '#8b949e', callback: (value) => `${value}%` },
-      grid: { color: '#21262d' }
-    }
-  }
-};
+  };
+});
+
+const chartKey = computed(() => `${resolvedTheme.value}-${scaleMode.value}-${range.value}`);
+const scaleDescription = computed(() => scaleMode.value === 'fixed'
+  ? 'Escala absoluta de 0% a 100% para as duas séries.'
+  : `Escala automática: CPU ${cpuBounds.value.min}%–${cpuBounds.value.max}% · Memória ${memoryBounds.value.min}%–${memoryBounds.value.max}%.`);
 
 async function loadChart() {
   if (LineChart.value) return;
@@ -165,6 +344,7 @@ onMounted(() => {
   document.addEventListener('visibilitychange', onVisibilityChange);
 });
 watch(range, refresh);
+watch(scaleMode, (value) => localStorage.setItem('dashboard-chart-scale', value));
 onBeforeUnmount(() => {
   window.clearInterval(timer);
   document.removeEventListener('visibilitychange', onVisibilityChange);
@@ -286,19 +466,40 @@ onBeforeUnmount(() => {
           </article>
         </div>
         <section class="rounded-lg border border-border bg-surface p-5">
-          <div class="flex flex-wrap items-start justify-between gap-3">
+          <div class="flex flex-wrap items-start justify-between gap-4">
             <div>
               <h3 class="font-semibold">CPU e memória</h3>
               <p class="mt-1 text-sm text-muted">
                 {{ history.length }} leituras no intervalo. Coleta a cada
                 {{ metrics.samplingIntervalSeconds ?? 5 }} s; lacunas não são simuladas.
+                <span v-if="chartSamples.length < history.length">
+                  {{ chartSamples.length }} pontos representativos são renderizados.
+                </span>
               </p>
+              <p class="mt-1 text-xs text-muted">{{ scaleDescription }}</p>
             </div>
-            <label class="text-sm"><span class="sr-only">Intervalo do gráfico</span><select v-model="range" class="min-h-10 rounded-md border border-border bg-canvas px-3"><option value="1h">Última hora</option><option value="6h">Últimas 6 horas</option><option value="24h">Últimas 24 horas</option></select></label>
+            <div class="flex flex-wrap gap-3">
+              <label class="text-sm">
+                <span class="mb-1 block text-xs text-muted">Intervalo</span>
+                <select v-model="range" class="min-h-10 rounded-md border border-border bg-canvas px-3">
+                  <option value="1h">Última hora</option>
+                  <option value="6h">Últimas 6 horas</option>
+                  <option value="24h">Últimas 24 horas</option>
+                </select>
+              </label>
+              <label class="text-sm">
+                <span class="mb-1 block text-xs text-muted">Escala</span>
+                <select v-model="scaleMode" class="min-h-10 rounded-md border border-border bg-canvas px-3">
+                  <option value="auto">Automática</option>
+                  <option value="fixed">0–100%</option>
+                </select>
+              </label>
+            </div>
           </div>
-          <div v-if="LineChart" class="mt-5 h-64">
+          <div v-if="LineChart" class="mt-5 h-72">
             <component
               :is="LineChart"
+              :key="chartKey"
               :data="chartData"
               :options="chartOptions"
               aria-label="Gráfico de CPU e memória"

@@ -1,0 +1,47 @@
+name: Validate
+
+on:
+  pull_request:
+  push:
+    branches:
+      - master
+      - merge/ux-session-device-details
+
+permissions:
+  contents: read
+
+jobs:
+  quality:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - name: Run validation commands
+        id: validate
+        shell: bash
+        run: |
+          mkdir -p validation-reports
+          set +e
+          npm run lint > validation-reports/lint.txt 2>&1
+          lint_status=$?
+          npm test > validation-reports/test.txt 2>&1
+          test_status=$?
+          npm run build > validation-reports/build.txt 2>&1
+          build_status=$?
+          set -e
+          cat validation-reports/lint.txt
+          cat validation-reports/test.txt
+          cat validation-reports/build.txt
+          if [ "$lint_status" -ne 0 ] || [ "$test_status" -ne 0 ] || [ "$build_status" -ne 0 ]; then
+            exit 1
+          fi
+      - name: Upload validation reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: validation-reports
+          path: validation-reports

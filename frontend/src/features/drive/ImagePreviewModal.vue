@@ -5,7 +5,7 @@ import { nextTick, onBeforeUnmount, onMounted, ref } from 'vue';
 import AppButton from '@/components/base/AppButton.vue';
 import { formatBytes } from '@/features/dashboard/format';
 
-const props = defineProps({
+defineProps({
   file: {
     type: Object,
     required: true

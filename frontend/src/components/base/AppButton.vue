@@ -15,7 +15,7 @@ defineProps({
       variant === 'primary'
         ? 'border-accent bg-accent text-white hover:bg-blue-500'
         : variant === 'danger'
-          ? 'border-red-500/60 bg-red-500/10 text-red-200 hover:bg-red-500/20'
+          ? 'app-button-danger'
           : 'border-border bg-elevated text-foreground hover:bg-border'
     "
   >
