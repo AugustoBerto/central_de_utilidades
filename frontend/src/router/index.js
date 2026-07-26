@@ -43,7 +43,7 @@ export const routes = [
     meta: {
       layout: AppShell,
       title: 'Drive pessoal',
-      description: 'Envie e recupere arquivos de trabalho.',
+      description: 'Organize pastas, encontre arquivos e acompanhe o armazenamento.',
       requiresAuth: true
     }
   },

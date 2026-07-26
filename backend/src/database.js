@@ -119,13 +119,27 @@ export function openDatabase(path) {
       created_at TEXT NOT NULL,
       updated_at TEXT NOT NULL
     );
+    CREATE TABLE IF NOT EXISTS folders (
+      id INTEGER PRIMARY KEY,
+      parent_id INTEGER REFERENCES folders(id) ON DELETE RESTRICT,
+      name TEXT NOT NULL,
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL
+    );
     CREATE TABLE IF NOT EXISTS files (
       id INTEGER PRIMARY KEY,
       storage_name TEXT NOT NULL UNIQUE,
       original_name TEXT NOT NULL,
       mime_type TEXT NOT NULL,
       size_bytes INTEGER NOT NULL,
+      folder_id INTEGER REFERENCES folders(id) ON DELETE RESTRICT,
       created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL
+    );
+    CREATE TABLE IF NOT EXISTS drive_settings (
+      id INTEGER PRIMARY KEY CHECK (id = 1),
+      reserved_bytes INTEGER NOT NULL,
+      max_upload_bytes INTEGER NOT NULL,
       updated_at TEXT NOT NULL
     );
     CREATE TABLE IF NOT EXISTS shortcuts (
@@ -166,17 +180,33 @@ export function openDatabase(path) {
     CREATE INDEX IF NOT EXISTS recovery_codes_user_id_idx ON recovery_codes(user_id);
     CREATE INDEX IF NOT EXISTS notes_updated_at_idx ON notes(updated_at DESC);
     CREATE INDEX IF NOT EXISTS files_updated_at_idx ON files(updated_at DESC);
+    CREATE INDEX IF NOT EXISTS folders_parent_idx ON folders(parent_id, name COLLATE NOCASE);
+    CREATE UNIQUE INDEX IF NOT EXISTS folders_root_name_idx
+      ON folders(name COLLATE NOCASE)
+      WHERE parent_id IS NULL;
+    CREATE UNIQUE INDEX IF NOT EXISTS folders_child_name_idx
+      ON folders(parent_id, name COLLATE NOCASE)
+      WHERE parent_id IS NOT NULL;
     CREATE INDEX IF NOT EXISTS shortcuts_group_position_idx ON shortcuts(group_name, position);
     CREATE INDEX IF NOT EXISTS automation_runs_automation_idx ON automation_runs(automation_id, created_at DESC);
     CREATE INDEX IF NOT EXISTS metric_samples_collected_at_idx ON metric_samples(collected_at DESC);
   `);
 
-  // Bancos criados antes destes campos recebem uma migração aditiva e segura.
+  // Bancos antigos recebem migrações aditivas e mantêm arquivos existentes na raiz.
   ensureColumn(database, 'sessions', 'device_name', 'TEXT');
   ensureColumn(database, 'sessions', 'browser_name', 'TEXT');
   ensureColumn(database, 'sessions', 'ip_address', 'TEXT');
   ensureColumn(database, 'sessions', 'user_agent', 'TEXT');
+  ensureColumn(
+    database,
+    'files',
+    'folder_id',
+    'INTEGER REFERENCES folders(id) ON DELETE RESTRICT'
+  );
   ensureColumn(database, 'shortcuts', 'pinned_slot', 'INTEGER');
+  database.exec(
+    'CREATE INDEX IF NOT EXISTS files_folder_updated_idx ON files(folder_id, updated_at DESC)'
+  );
   database.transaction(() => migratePinnedShortcutSlots(database))();
 
   return database;

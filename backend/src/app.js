@@ -3,6 +3,7 @@ import { randomUUID } from 'node:crypto';
 import express from 'express';
 import helmet from 'helmet';
 
+import { registerDriveRoutes } from './drive-routes.js';
 import { HttpError } from './errors.js';
 
 function parseCookies(header = '') {
@@ -48,7 +49,9 @@ export function createApp({
   authService,
   automationService,
   config = {},
+  driveSettingsService,
   fileService,
+  folderService,
   noteService,
   shortcutService,
   systemMetricsService,
@@ -190,21 +193,16 @@ export function createApp({
       next(error);
     }
   });
-  app.get('/api/files', requireAuth, (request, response, next) => {
-    try {
-      response.json(
-        fileService.list({
-          query: request.query.q,
-          sort: request.query.sort,
-          order: request.query.order,
-          limit: request.query.limit,
-          offset: request.query.offset
-        })
-      );
-    } catch (error) {
-      next(error);
-    }
+
+  registerDriveRoutes(app, {
+    driveSettingsService,
+    fileService,
+    folderService,
+    requireAuth,
+    requireCsrf,
+    requireSameOrigin
   });
+
   app.get('/api/shortcuts', requireAuth, (_request, response, next) => {
     try {
       response.json({ shortcuts: shortcutService.list() });
@@ -337,56 +335,6 @@ export function createApp({
     (request, response, next) => {
       try {
         shortcutService.remove(request.params.shortcutId);
-        response.status(204).end();
-      } catch (error) {
-        next(error);
-      }
-    }
-  );
-  app.post(
-    '/api/files',
-    requireAuth,
-    requireSameOrigin,
-    requireCsrf,
-    async (request, response, next) => {
-      try {
-        const file = await fileService.upload(request, {
-          originalName: request.get('x-file-name'),
-          mimeType: request.get('content-type'),
-          contentLength: request.get('content-length')
-        });
-        response.status(201).json({ file });
-      } catch (error) {
-        next(error);
-      }
-    }
-  );
-  const sendFile = (preview) => async (request, response, next) => {
-    try {
-      const { file, path } = await fileService.open(request.params.fileId, preview);
-      const disposition = preview ? 'inline' : 'attachment';
-      response
-        .type(file.mimeType)
-        .set('X-Content-Type-Options', 'nosniff')
-        .set(
-          'Content-Disposition',
-          `${disposition}; filename*=UTF-8''${encodeURIComponent(file.originalName)}`
-        )
-        .sendFile(path, (error) => error && next(error));
-    } catch (error) {
-      next(error);
-    }
-  };
-  app.get('/api/files/:fileId/download', requireAuth, sendFile(false));
-  app.get('/api/files/:fileId/preview', requireAuth, sendFile(true));
-  app.delete(
-    '/api/files/:fileId',
-    requireAuth,
-    requireSameOrigin,
-    requireCsrf,
-    async (request, response, next) => {
-      try {
-        await fileService.remove(request.params.fileId);
         response.status(204).end();
       } catch (error) {
         next(error);
