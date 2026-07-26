@@ -1,8 +1,8 @@
+import { randomUUID } from 'node:crypto';
 import { createWriteStream, mkdirSync, promises as fs, statfsSync } from 'node:fs';
 import { basename, join, resolve } from 'node:path';
-import { pipeline } from 'node:stream/promises';
 import { Transform } from 'node:stream';
-import { randomUUID } from 'node:crypto';
+import { pipeline } from 'node:stream/promises';
 
 import { HttpError } from './errors.js';
 
@@ -26,6 +26,7 @@ function toFile(row) {
       originalName: row.original_name,
       mimeType: row.mime_type,
       sizeBytes: row.size_bytes,
+      folderId: row.folder_id ?? null,
       createdAt: row.created_at,
       updatedAt: row.updated_at,
       previewAvailable: PREVIEW_TYPES.has(row.mime_type)
@@ -63,11 +64,12 @@ function contentType(value) {
 }
 
 export class FileService {
-  constructor(database, { filesDir, maxUploadBytes }) {
+  constructor(database, { filesDir, maxUploadBytes, driveSettingsService = null }) {
     this.database = database;
     this.filesDir = resolve(filesDir);
     this.tempDir = join(filesDir, '.tmp');
     this.maxUploadBytes = maxUploadBytes;
+    this.driveSettingsService = driveSettingsService;
     mkdirSync(this.tempDir, { recursive: true });
   }
 
@@ -106,6 +108,10 @@ export class FileService {
     return file;
   }
 
+  uploadLimit() {
+    return this.driveSettingsService?.get().maxUploadBytes ?? this.maxUploadBytes;
+  }
+
   diskHasSpace(bytes) {
     try {
       const stats = statfsSync(this.filesDir);
@@ -115,21 +121,26 @@ export class FileService {
     }
   }
 
+  assertStorageAvailable(bytes) {
+    if (this.driveSettingsService) {
+      this.driveSettingsService.assertUploadAllowed(bytes);
+      return;
+    }
+    if (!this.diskHasSpace(bytes))
+      throw new HttpError(507, 'INSUFFICIENT_STORAGE', 'Espaço insuficiente para o upload.');
+  }
+
   async upload(stream, { originalName, mimeType, contentLength }) {
     const name = validateOriginalName(originalName);
     const declaredLength = Number.parseInt(contentLength, 10);
-    if (Number.isSafeInteger(declaredLength) && declaredLength > this.maxUploadBytes)
+    if (Number.isSafeInteger(declaredLength) && declaredLength > this.uploadLimit())
       throw new HttpError(
         413,
         'FILE_TOO_LARGE',
         'O arquivo excede o limite permitido.'
       );
-    if (Number.isSafeInteger(declaredLength) && !this.diskHasSpace(declaredLength))
-      throw new HttpError(
-        507,
-        'INSUFFICIENT_STORAGE',
-        'Espaço insuficiente para o upload.'
-      );
+    if (Number.isSafeInteger(declaredLength) && declaredLength > 0)
+      this.assertStorageAvailable(declaredLength);
 
     const storageName = randomUUID();
     const temporaryPath = join(this.tempDir, storageName);
@@ -138,19 +149,18 @@ export class FileService {
     const counter = new Transform({
       transform: (chunk, _encoding, callback) => {
         sizeBytes += chunk.length;
-        if (sizeBytes > this.maxUploadBytes)
+        if (sizeBytes > this.uploadLimit()) {
           callback(
             new HttpError(413, 'FILE_TOO_LARGE', 'O arquivo excede o limite permitido.')
           );
-        else if (!this.diskHasSpace(chunk.length))
-          callback(
-            new HttpError(
-              507,
-              'INSUFFICIENT_STORAGE',
-              'Espaço insuficiente para o upload.'
-            )
-          );
-        else callback(null, chunk);
+          return;
+        }
+        try {
+          this.assertStorageAvailable(sizeBytes);
+          callback(null, chunk);
+        } catch (error) {
+          callback(error);
+        }
       }
     });
     try {
@@ -163,7 +173,9 @@ export class FileService {
       const timestamp = nowIso();
       const result = this.database
         .prepare(
-          'INSERT INTO files (storage_name, original_name, mime_type, size_bytes, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)'
+          `INSERT INTO files
+           (storage_name, original_name, mime_type, size_bytes, folder_id, created_at, updated_at)
+           VALUES (?, ?, ?, ?, NULL, ?, ?)`
         )
         .run(storageName, name, contentType(mimeType), sizeBytes, timestamp, timestamp);
       return this.get(result.lastInsertRowid);
