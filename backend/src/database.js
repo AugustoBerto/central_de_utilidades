@@ -10,6 +10,59 @@ function ensureColumn(database, table, column, definition) {
   }
 }
 
+function migratePinnedShortcutSlots(database) {
+  const rows = database
+    .prepare(
+      `SELECT id, is_pinned, pinned_slot, position, updated_at
+       FROM shortcuts
+       ORDER BY position, updated_at DESC, id DESC`
+    )
+    .all();
+  const used = new Set();
+  const pending = [];
+
+  for (const row of rows) {
+    const slot = Number(row.pinned_slot);
+    if (
+      row.pinned_slot !== null &&
+      Number.isInteger(slot) &&
+      slot >= 0 &&
+      slot < 5 &&
+      !used.has(slot)
+    ) {
+      used.add(slot);
+      continue;
+    }
+    if (row.is_pinned) pending.push(row.id);
+    database
+      .prepare('UPDATE shortcuts SET pinned_slot = NULL WHERE id = ?')
+      .run(row.id);
+  }
+
+  const available = [0, 1, 2, 3, 4].filter((slot) => !used.has(slot));
+  const selectedSlots = available.slice(Math.max(0, available.length - pending.length));
+  const assign = database.prepare(
+    'UPDATE shortcuts SET is_pinned = 1, pinned_slot = ? WHERE id = ?'
+  );
+  const unpin = database.prepare(
+    'UPDATE shortcuts SET is_pinned = 0, pinned_slot = NULL WHERE id = ?'
+  );
+
+  pending.forEach((id, index) => {
+    const slot = selectedSlots[index];
+    if (slot === undefined) unpin.run(id);
+    else assign.run(slot, id);
+  });
+
+  database.exec(`
+    UPDATE shortcuts SET is_pinned = 0 WHERE pinned_slot IS NULL;
+    UPDATE shortcuts SET is_pinned = 1 WHERE pinned_slot IS NOT NULL;
+    CREATE UNIQUE INDEX IF NOT EXISTS shortcuts_pinned_slot_idx
+      ON shortcuts(pinned_slot)
+      WHERE pinned_slot IS NOT NULL;
+  `);
+}
+
 export function openDatabase(path) {
   mkdirSync(dirname(path), { recursive: true });
   const database = new Database(path);
@@ -82,6 +135,7 @@ export function openDatabase(path) {
       group_name TEXT NOT NULL DEFAULT '',
       icon_key TEXT NOT NULL DEFAULT 'link',
       is_pinned INTEGER NOT NULL DEFAULT 0,
+      pinned_slot INTEGER,
       position INTEGER NOT NULL,
       created_at TEXT NOT NULL,
       updated_at TEXT NOT NULL
@@ -122,6 +176,8 @@ export function openDatabase(path) {
   ensureColumn(database, 'sessions', 'browser_name', 'TEXT');
   ensureColumn(database, 'sessions', 'ip_address', 'TEXT');
   ensureColumn(database, 'sessions', 'user_agent', 'TEXT');
+  ensureColumn(database, 'shortcuts', 'pinned_slot', 'INTEGER');
+  database.transaction(() => migratePinnedShortcutSlots(database))();
 
   return database;
 }
