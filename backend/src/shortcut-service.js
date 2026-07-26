@@ -1,5 +1,6 @@
 import { HttpError } from './errors.js';
 
+const PINNED_SLOT_COUNT = 5;
 const ICON_KEYS = new Set([
   'book-open',
   'folder',
@@ -24,6 +25,7 @@ function toShortcut(row) {
       groupName: row.group_name,
       iconKey: row.icon_key,
       isPinned: Boolean(row.is_pinned),
+      pinnedSlot: row.pinned_slot === null ? null : Number(row.pinned_slot),
       position: row.position,
       createdAt: row.created_at,
       updatedAt: row.updated_at
@@ -102,12 +104,15 @@ export class ShortcutService {
       .map(toShortcut);
   }
 
-  pinned(limit = 3) {
+  pinned() {
     return this.database
       .prepare(
-        'SELECT * FROM shortcuts WHERE is_pinned = 1 ORDER BY position, updated_at DESC, id DESC LIMIT ?'
+        `SELECT * FROM shortcuts
+         WHERE is_pinned = 1 AND pinned_slot IS NOT NULL
+         ORDER BY pinned_slot
+         LIMIT ?`
       )
-      .all(Math.min(Math.max(Number(limit) || 3, 1), 3))
+      .all(PINNED_SLOT_COUNT)
       .map(toShortcut);
   }
 
@@ -120,42 +125,82 @@ export class ShortcutService {
     return shortcut;
   }
 
+  findAvailablePinnedSlot(excludeId = null) {
+    const rows = this.database
+      .prepare(
+        `SELECT pinned_slot FROM shortcuts
+         WHERE pinned_slot IS NOT NULL AND (? IS NULL OR id <> ?)`
+      )
+      .all(excludeId, excludeId);
+    const occupied = new Set(rows.map((row) => Number(row.pinned_slot)));
+    for (let slot = PINNED_SLOT_COUNT - 1; slot >= 0; slot -= 1) {
+      if (!occupied.has(slot)) return slot;
+    }
+    throw new HttpError(
+      422,
+      'PINNED_SHORTCUT_LIMIT',
+      'A barra de acesso rápido já possui 5 atalhos. Desafixe um item para liberar uma posição.'
+    );
+  }
+
   create(input) {
     const shortcut = validate(input, { allowHttp: this.allowHttpShortcuts });
     const timestamp = nowIso();
-    const position =
-      this.database
+
+    return this.database.transaction(() => {
+      const position =
+        this.database
+          .prepare(
+            'SELECT COALESCE(MAX(position), -1) AS position FROM shortcuts WHERE group_name = ?'
+          )
+          .get(shortcut.groupName).position + 1;
+      const pinnedSlot = shortcut.isPinned ? this.findAvailablePinnedSlot() : null;
+      const result = this.database
         .prepare(
-          'SELECT COALESCE(MAX(position), -1) AS position FROM shortcuts WHERE group_name = ?'
+          `INSERT INTO shortcuts
+           (label, url, group_name, icon_key, is_pinned, pinned_slot, position, created_at, updated_at)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`
         )
-        .get(shortcut.groupName).position + 1;
-    const result = this.database
-      .prepare(
-        'INSERT INTO shortcuts (label, url, group_name, icon_key, is_pinned, position, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)'
-      )
-      .run(
-        shortcut.label,
-        shortcut.url,
-        shortcut.groupName,
-        shortcut.iconKey,
-        Number(shortcut.isPinned),
-        position,
-        timestamp,
-        timestamp
-      );
-    return this.get(result.lastInsertRowid);
+        .run(
+          shortcut.label,
+          shortcut.url,
+          shortcut.groupName,
+          shortcut.iconKey,
+          Number(shortcut.isPinned),
+          pinnedSlot,
+          position,
+          timestamp,
+          timestamp
+        );
+      return this.get(result.lastInsertRowid);
+    })();
   }
 
   update(id, input) {
+    if (String(id) === 'pinned-layout') {
+      return { slots: this.setPinnedLayout(input?.slots) };
+    }
+
     const existing = this.get(id);
-    const next = {
-      ...existing,
-      ...validate(input, { partial: true, allowHttp: this.allowHttpShortcuts })
-    };
+    const validated = validate(input, {
+      partial: true,
+      allowHttp: this.allowHttpShortcuts
+    });
+    const next = { ...existing, ...validated };
     const timestamp = nowIso();
+
+    let pinnedSlot = existing.pinnedSlot;
+    if (Object.hasOwn(validated, 'isPinned')) {
+      if (!validated.isPinned) pinnedSlot = null;
+      else if (!existing.isPinned || pinnedSlot === null)
+        pinnedSlot = this.findAvailablePinnedSlot(existing.id);
+    }
+
     this.database
       .prepare(
-        'UPDATE shortcuts SET label = ?, url = ?, group_name = ?, icon_key = ?, is_pinned = ?, updated_at = ? WHERE id = ?'
+        `UPDATE shortcuts
+         SET label = ?, url = ?, group_name = ?, icon_key = ?, is_pinned = ?, pinned_slot = ?, updated_at = ?
+         WHERE id = ?`
       )
       .run(
         next.label,
@@ -163,11 +208,62 @@ export class ShortcutService {
         next.groupName,
         next.iconKey,
         Number(next.isPinned),
+        next.isPinned ? pinnedSlot : null,
         timestamp,
         id
       );
+
     if (Number.isInteger(input.position)) this.move(id, input.position, next.groupName);
     return this.get(id);
+  }
+
+  setPinnedLayout(slots) {
+    if (!Array.isArray(slots) || slots.length !== PINNED_SLOT_COUNT)
+      throw new HttpError(
+        422,
+        'PINNED_LAYOUT_INVALID',
+        'Informe exatamente as 5 posições da barra de acesso rápido.'
+      );
+
+    const ids = slots.filter((id) => id !== null).map(Number);
+    if (
+      ids.some((id) => !Number.isInteger(id) || id <= 0) ||
+      new Set(ids).size !== ids.length
+    )
+      throw new HttpError(
+        422,
+        'PINNED_LAYOUT_INVALID',
+        'A organização dos atalhos fixados é inválida.'
+      );
+
+    const currentIds = this.pinned().map((shortcut) => shortcut.id).sort((a, b) => a - b);
+    const requestedIds = [...ids].sort((a, b) => a - b);
+    if (
+      currentIds.length !== requestedIds.length ||
+      currentIds.some((id, index) => id !== requestedIds[index])
+    )
+      throw new HttpError(
+        409,
+        'PINNED_LAYOUT_STALE',
+        'Os atalhos fixados mudaram. Atualize a página e tente novamente.'
+      );
+
+    const clear = this.database.prepare(
+      'UPDATE shortcuts SET pinned_slot = NULL, updated_at = ? WHERE is_pinned = 1'
+    );
+    const assign = this.database.prepare(
+      'UPDATE shortcuts SET pinned_slot = ?, updated_at = ? WHERE id = ? AND is_pinned = 1'
+    );
+    const timestamp = nowIso();
+
+    this.database.transaction(() => {
+      clear.run(timestamp);
+      slots.forEach((id, slot) => {
+        if (id !== null) assign.run(slot, timestamp, Number(id));
+      });
+    })();
+
+    return slots.map((id) => (id === null ? null : this.get(id)));
   }
 
   move(id, targetPosition, groupName) {
