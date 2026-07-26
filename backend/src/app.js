@@ -58,6 +58,7 @@ export function createApp({
   const authRateLimit = createRateLimiter();
 
   app.disable('x-powered-by');
+  app.set('trust proxy', config.trustProxyHops);
   app.use(
     helmet({ contentSecurityPolicy: environment === 'production' ? undefined : false })
   );
@@ -147,7 +148,10 @@ export function createApp({
     requireSameOrigin,
     async (request, response, next) => {
       try {
-        const result = await authService.login(request.body ?? {});
+        const result = await authService.login(request.body ?? {}, {
+          userAgent: request.get('user-agent'),
+          ipAddress: request.ip
+        });
         sessionCookie(response, result.session);
         response
           .status(200)
