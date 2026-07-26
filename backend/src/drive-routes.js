@@ -50,6 +50,14 @@ export function registerDriveRoutes(
     }
   });
 
+  app.get('/api/folders/tree', requireAuth, (_request, response, next) => {
+    try {
+      response.json({ folders: folderService.tree() });
+    } catch (error) {
+      next(error);
+    }
+  });
+
   app.get('/api/folders/:folderId', requireAuth, (request, response, next) => {
     try {
       const folder = folderService.get(request.params.folderId);
