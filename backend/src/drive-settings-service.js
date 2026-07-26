@@ -19,6 +19,13 @@ function positiveInteger(value, field) {
   return parsed;
 }
 
+function nonNegativeInteger(value, field) {
+  const parsed = Number(value);
+  if (!Number.isSafeInteger(parsed) || parsed < 0)
+    throw new TypeError(`${field} deve ser um inteiro não negativo.`);
+  return parsed;
+}
+
 function toSettings(row) {
   return {
     reservedBytes: row.reserved_bytes,
@@ -72,7 +79,7 @@ export class DriveSettingsService {
     return toSettings(row);
   }
 
-  update(changes = {}) {
+  update(changes = {}, { pendingBytes = 0 } = {}) {
     const current = this.get();
     const reservedBytes = Object.hasOwn(changes, 'reservedBytes')
       ? positiveInteger(changes.reservedBytes, 'reservedBytes')
@@ -81,13 +88,15 @@ export class DriveSettingsService {
       ? positiveInteger(changes.maxUploadBytes, 'maxUploadBytes')
       : current.maxUploadBytes;
     const usedBytes = this.usedBytes();
+    const pending = nonNegativeInteger(pendingBytes, 'pendingBytes');
+    const committedBytes = usedBytes + pending;
 
-    if (reservedBytes < usedBytes)
+    if (reservedBytes < committedBytes)
       throw new HttpError(
         422,
         'DRIVE_QUOTA_BELOW_USAGE',
-        'O espaço reservado não pode ser menor que o espaço já utilizado.',
-        { reservedBytes: `O Drive já utiliza ${usedBytes} bytes.` }
+        'O espaço reservado não pode ser menor que o uso atual e os uploads em andamento.',
+        { reservedBytes: `O Drive já possui ${committedBytes} bytes comprometidos.` }
       );
     if (maxUploadBytes > reservedBytes)
       throw new HttpError(
@@ -144,9 +153,7 @@ export class DriveSettingsService {
 
   assertUploadAllowed(bytes, { pendingBytes = 0 } = {}) {
     const uploadBytes = positiveInteger(bytes, 'sizeBytes');
-    const pending = Number(pendingBytes);
-    if (!Number.isSafeInteger(pending) || pending < 0)
-      throw new TypeError('pendingBytes deve ser um inteiro não negativo.');
+    const pending = nonNegativeInteger(pendingBytes, 'pendingBytes');
     const status = this.status();
     if (uploadBytes > status.maxUploadBytes)
       throw new HttpError(413, 'FILE_TOO_LARGE', 'O arquivo excede o limite permitido.');
