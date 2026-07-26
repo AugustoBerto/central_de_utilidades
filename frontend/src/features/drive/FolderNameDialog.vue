@@ -7,6 +7,7 @@ import AppButton from '@/components/base/AppButton.vue';
 const props = defineProps({
   title: { type: String, required: true },
   description: { type: String, default: '' },
+  fieldLabel: { type: String, default: 'Nome da pasta' },
   initialName: { type: String, default: '' },
   submitLabel: { type: String, default: 'Salvar' },
   loading: { type: Boolean, default: false },
@@ -74,11 +75,11 @@ onBeforeUnmount(() => {
 <template>
   <Teleport to="body">
     <div class="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4 backdrop-blur-sm" role="presentation" @mousedown.self="close">
-      <section ref="dialog" class="w-full max-w-md rounded-xl border border-border bg-surface p-5 shadow-2xl" role="dialog" aria-modal="true" aria-labelledby="folder-dialog-title" :aria-describedby="description ? 'folder-dialog-description' : undefined">
+      <section ref="dialog" class="w-full max-w-md rounded-xl border border-border bg-surface p-5 shadow-2xl" role="dialog" aria-modal="true" aria-labelledby="item-name-dialog-title" :aria-describedby="description ? 'item-name-dialog-description' : undefined">
         <div class="flex items-start justify-between gap-4">
           <div>
-            <h2 id="folder-dialog-title" class="text-lg font-semibold">{{ title }}</h2>
-            <p v-if="description" id="folder-dialog-description" class="mt-1 text-sm text-muted">{{ description }}</p>
+            <h2 id="item-name-dialog-title" class="text-lg font-semibold">{{ title }}</h2>
+            <p v-if="description" id="item-name-dialog-description" class="mt-1 text-sm text-muted">{{ description }}</p>
           </div>
           <button type="button" class="rounded-md p-2 text-muted hover:bg-elevated hover:text-foreground" aria-label="Fechar" :disabled="loading" @click="close">
             <X :size="18" aria-hidden="true" />
@@ -86,8 +87,8 @@ onBeforeUnmount(() => {
         </div>
 
         <form class="mt-5" @submit.prevent="submit">
-          <label class="block text-sm font-medium" for="folder-name">Nome da pasta</label>
-          <input id="folder-name" ref="input" v-model="name" class="mt-2 min-h-11 w-full rounded-md border border-border bg-canvas px-3 text-sm outline-none focus:border-accent focus:ring-2 focus:ring-accent/20" maxlength="255" autocomplete="off" required />
+          <label class="block text-sm font-medium" for="item-name">{{ fieldLabel }}</label>
+          <input id="item-name" ref="input" v-model="name" class="mt-2 min-h-11 w-full rounded-md border border-border bg-canvas px-3 text-sm outline-none focus:border-accent focus:ring-2 focus:ring-accent/20" maxlength="255" autocomplete="off" required />
           <p v-if="error" class="mt-2 text-sm text-red-500" role="alert">{{ error }}</p>
           <div class="mt-5 flex flex-wrap justify-end gap-2">
             <AppButton variant="secondary" :disabled="loading" @click="close">Cancelar</AppButton>
