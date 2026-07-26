@@ -7,23 +7,23 @@ function sizeInBytes(value) {
   return Math.round(parsed * 1024 * 1024);
 }
 
-export function buildDriveFilesPath({
+export function buildDriveItemsPath({
   folderId = null,
   query = '',
   searchCurrentFolder = false,
-  sort = 'updatedAt:desc',
+  sort = 'name:asc',
   filters = {},
   page = 0
 } = {}) {
   const params = new URLSearchParams();
   const normalizedQuery = String(query).trim();
-  const [sortBy = 'updatedAt', order = 'desc'] = String(sort).split(':');
+  const [sortBy = 'name', order = 'asc'] = String(sort).split(':');
 
   if (folderId !== null && folderId !== undefined) params.set('folderId', String(folderId));
   if (normalizedQuery) params.set('q', normalizedQuery);
   params.set('scope', normalizedQuery && !searchCurrentFolder ? 'all' : 'folder');
   params.set('sort', sortBy);
-  params.set('order', order === 'asc' ? 'asc' : 'desc');
+  params.set('order', order === 'desc' ? 'desc' : 'asc');
 
   if (filters.from) params.set('from', filters.from);
   if (filters.to) params.set('to', filters.to);
@@ -36,8 +36,10 @@ export function buildDriveFilesPath({
 
   params.set('limit', String(DRIVE_PAGE_SIZE));
   params.set('offset', String(Math.max(0, Number(page) || 0) * DRIVE_PAGE_SIZE));
-  return `/api/files?${params.toString()}`;
+  return `/api/drive/items?${params.toString()}`;
 }
+
+export const buildDriveFilesPath = buildDriveItemsPath;
 
 export function activeDriveFilters(filters = {}) {
   const active = [];
@@ -49,6 +51,7 @@ export function activeDriveFilters(filters = {}) {
     active.push({ key: 'maxSizeMb', label: `Máximo ${filters.maxSizeMb} MB` });
   if (filters.type && filters.type !== 'all') {
     const labels = {
+      folder: 'Pastas',
       image: 'Imagens',
       document: 'Documentos',
       audio: 'Áudios',
