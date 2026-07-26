@@ -1,8 +1,18 @@
 <script setup>
 import {
-  Bold, Check, Clipboard, Code2, Download, FilePlus2, FileText, FileUp, Grid2X2,
-  Heading2, Italic, Link2, List, ListOrdered, Minus, Pencil, Quote, Save as SaveIcon,
-  Search, Strikethrough, Trash2, Underline
+  Check,
+  Clipboard,
+  Download,
+  FilePlus2,
+  FileText,
+  FileUp,
+  Grid2X2,
+  List,
+  Pencil,
+  Save as SaveIcon,
+  Search,
+  Trash2,
+  Type
 } from 'lucide-vue-next';
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 
@@ -10,6 +20,7 @@ import AppButton from '@/components/base/AppButton.vue';
 import AppModal from '@/components/base/AppModal.vue';
 import AppShell from '@/components/layout/AppShell.vue';
 import { useConfirm } from '@/composables/useConfirm';
+import MarkdownContextMenu from '@/features/notes/MarkdownContextMenu.vue';
 import MarkdownEditor from '@/features/notes/MarkdownEditor.vue';
 import MarkdownViewer from '@/features/notes/MarkdownViewer.vue';
 import { notePreview } from '@/features/notes/markdown';
@@ -26,7 +37,6 @@ const to = ref('');
 const viewMode = ref(localStorage.getItem('notes-view-mode') === 'list' ? 'list' : 'cards');
 const editorTab = ref('write');
 const desktopMode = ref('split');
-const codeLanguage = ref('bash');
 const loading = ref(true);
 const saving = ref(false);
 const copying = ref(false);
@@ -39,6 +49,8 @@ const editor = ref({ title: '', content: '', updatedAt: null });
 const markdownEditor = ref(null);
 const fileInput = ref(null);
 const savedSnapshot = ref('');
+const contextMenu = ref(null);
+const hasEditorSelection = ref(false);
 let searchTimer;
 let copyTimer;
 
@@ -59,7 +71,10 @@ function triggerDownload(extension, content, mimeType) {
   const blob = new Blob([content], { type: `${mimeType};charset=utf-8` });
   const url = URL.createObjectURL(blob);
   const link = Object.assign(document.createElement('a'), { href: url, download: `${safeFileName(source.title)}.${extension}` });
-  document.body.appendChild(link); link.click(); link.remove(); URL.revokeObjectURL(url);
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  URL.revokeObjectURL(url);
 }
 function downloadMarkdown() { triggerDownload('md', activeContent.value, 'text/markdown'); }
 function downloadText() {
@@ -77,7 +92,8 @@ async function copyMarkdown() {
 }
 
 async function load() {
-  loading.value = true; error.value = '';
+  loading.value = true;
+  error.value = '';
   try {
     const params = new URLSearchParams({ q: query.value, sort: sort.value });
     if (from.value) params.set('from', from.value);
@@ -87,21 +103,42 @@ async function load() {
   finally { loading.value = false; }
 }
 async function open(note) {
-  error.value = ''; fieldErrors.value = {};
-  try { selected.value = (await api(`/api/notes/${note.id}`)).note; modal.value = 'view'; }
-  catch (caught) { error.value = caught.message; }
+  error.value = '';
+  fieldErrors.value = {};
+  try {
+    selected.value = (await api(`/api/notes/${note.id}`)).note;
+    modal.value = 'view';
+  } catch (caught) { error.value = caught.message; }
 }
 function focusEditor() { nextTick(() => markdownEditor.value?.focus()); }
+function resetFormattingState() {
+  contextMenu.value = null;
+  hasEditorSelection.value = false;
+}
 function beginCreate(initial = { title: '', content: '' }) {
   selected.value = null;
   editor.value = { title: initial.title, content: initial.content, updatedAt: null };
-  fieldErrors.value = {}; error.value = ''; editorTab.value = 'write'; desktopMode.value = 'split'; modal.value = 'create'; snapshot(); focusEditor();
+  fieldErrors.value = {};
+  error.value = '';
+  editorTab.value = 'write';
+  desktopMode.value = 'split';
+  modal.value = 'create';
+  resetFormattingState();
+  snapshot();
+  focusEditor();
 }
 function beginEdit() {
   editor.value = { title: selected.value.title, content: selected.value.content, updatedAt: selected.value.updatedAt };
-  fieldErrors.value = {}; editorTab.value = 'write'; desktopMode.value = 'split'; modal.value = 'edit'; snapshot(); focusEditor();
+  fieldErrors.value = {};
+  editorTab.value = 'write';
+  desktopMode.value = 'split';
+  modal.value = 'edit';
+  resetFormattingState();
+  snapshot();
+  focusEditor();
 }
 async function closeModal() {
+  contextMenu.value = null;
   if (dirty.value) {
     const discard = await confirm({
       title: 'Descartar alterações?',
@@ -112,10 +149,14 @@ async function closeModal() {
     });
     if (!discard) return;
   }
-  modal.value = null; selected.value = null; fieldErrors.value = {};
+  modal.value = null;
+  selected.value = null;
+  fieldErrors.value = {};
+  resetFormattingState();
 }
 async function importFile(event) {
-  const file = event.target.files?.[0]; event.target.value = '';
+  const file = event.target.files?.[0];
+  event.target.value = '';
   if (!file) return;
   const extension = file.name.split('.').pop()?.toLowerCase();
   if (!['txt', 'md'].includes(extension)) { error.value = 'Selecione um arquivo .txt ou .md.'; return; }
@@ -126,24 +167,65 @@ async function importFile(event) {
     notice.value = `Arquivo “${file.name}” carregado. Revise antes de salvar.`;
   } catch { error.value = 'Não foi possível ler o arquivo selecionado.'; }
 }
-function replaceSelection(before, after = before, placeholder = 'texto') { markdownEditor.value?.replaceSelection(before, after, placeholder); }
-function prefixLines(prefix) { markdownEditor.value?.prefixLines(prefix); }
-function insertLink() { replaceSelection('[', '](https://)', 'texto do link'); }
-function insertCodeBlock() {
-  const language = codeLanguage.value === 'text' ? '' : codeLanguage.value;
-  replaceSelection(`\`\`\`${language}\n`, '\n```', language === 'bash' ? 'comando' : 'código');
+
+function replaceSelection(before, after = before, placeholder = 'texto') {
+  markdownEditor.value?.replaceSelection(before, after, placeholder);
+}
+function prefixLines(prefix) {
+  markdownEditor.value?.prefixLines(prefix);
+}
+function insertCodeBlock(language = 'bash') {
+  const normalized = language === 'text' ? '' : language;
+  replaceSelection(`\`\`\`${normalized}\n`, '\n```', normalized === 'bash' ? 'comando' : 'código');
+}
+function openEditorContextMenu(position) {
+  contextMenu.value = position;
+}
+function openFormattingFallback(event) {
+  const rect = event.currentTarget.getBoundingClientRect();
+  contextMenu.value = { x: rect.left, y: rect.bottom + 4 };
+}
+function onSelectionChange(value) {
+  hasEditorSelection.value = value;
+  if (!value) contextMenu.value = null;
+}
+function applyFormatting({ action, payload }) {
+  const handlers = {
+    heading: () => prefixLines('## '),
+    bold: () => replaceSelection('**'),
+    italic: () => replaceSelection('*'),
+    underline: () => replaceSelection('++'),
+    strike: () => replaceSelection('~~'),
+    'bullet-list': () => prefixLines('- '),
+    'numbered-list': () => prefixLines('1. '),
+    quote: () => prefixLines('> '),
+    'inline-code': () => replaceSelection('`'),
+    link: () => replaceSelection('[', '](https://)', 'texto do link'),
+    'code-block': () => insertCodeBlock(payload)
+  };
+  handlers[action]?.();
+  contextMenu.value = null;
 }
 
 async function save() {
   if (saving.value) return;
-  saving.value = true; error.value = ''; fieldErrors.value = {};
+  saving.value = true;
+  error.value = '';
+  fieldErrors.value = {};
+  contextMenu.value = null;
   try {
     const body = { ...editor.value, title: editor.value.title.trim(), content: editor.value.content.trim() };
     const headers = { 'X-CSRF-Token': auth.csrfToken };
     const result = modal.value === 'create'
       ? await api('/api/notes', { method: 'POST', headers, body })
       : await api(`/api/notes/${selected.value.id}`, { method: 'PATCH', headers, body });
-    selected.value = result.note; editor.value = { ...result.note }; snapshot(); modal.value = 'view'; notice.value = 'Nota salva.'; await load();
+    selected.value = result.note;
+    editor.value = { ...result.note };
+    snapshot();
+    modal.value = 'view';
+    notice.value = 'Nota salva.';
+    resetFormattingState();
+    await load();
   } catch (caught) {
     fieldErrors.value = caught.fields ?? {};
     error.value = caught instanceof ApiError && caught.code === 'NOTE_CONFLICT'
@@ -160,17 +242,27 @@ async function remove() {
     variant: 'danger'
   });
   if (!accepted) return;
-  saving.value = true; error.value = '';
+  saving.value = true;
+  error.value = '';
   try {
     await api(`/api/notes/${selected.value.id}`, { method: 'DELETE', headers: { 'X-CSRF-Token': auth.csrfToken } });
-    modal.value = null; selected.value = null; notice.value = 'Nota excluída.'; await load();
+    modal.value = null;
+    selected.value = null;
+    notice.value = 'Nota excluída.';
+    await load();
   } catch (caught) { error.value = caught.message; }
   finally { saving.value = false; }
 }
 
-watch([query, sort, from, to], () => { window.clearTimeout(searchTimer); searchTimer = window.setTimeout(load, 250); });
+watch([query, sort, from, to], () => {
+  window.clearTimeout(searchTimer);
+  searchTimer = window.setTimeout(load, 250);
+});
 onMounted(load);
-onBeforeUnmount(() => { window.clearTimeout(searchTimer); window.clearTimeout(copyTimer); });
+onBeforeUnmount(() => {
+  window.clearTimeout(searchTimer);
+  window.clearTimeout(copyTimer);
+});
 </script>
 
 <template>
@@ -216,21 +308,21 @@ onBeforeUnmount(() => { window.clearTimeout(searchTimer); window.clearTimeout(co
       <div v-if="modal === 'view'" class="h-[calc(92vh-5.5rem)] overflow-y-auto bg-canvas/40 px-5 py-8 sm:px-8"><div class="mx-auto max-w-[980px] rounded-xl border border-border bg-canvas/80 p-6 shadow-inner sm:p-9"><MarkdownViewer :content="selected.content" /></div></div>
 
       <form v-else class="flex h-[calc(92vh-5.5rem)] min-h-0 flex-col" @submit.prevent="save">
-        <div class="shrink-0 space-y-3 border-b border-border bg-surface px-5 py-4 sm:px-6">
-          <label class="block text-sm"><span>Título <span class="text-muted">(opcional)</span></span><input v-model="editor.title" class="mt-1 w-full rounded-md border border-border bg-canvas px-3 py-2" :aria-invalid="Boolean(fieldErrors.title)" maxlength="160" placeholder="Ex.: Procedimento de deploy"><span v-if="fieldErrors.title" class="mt-1 block text-xs text-red-500">{{ fieldErrors.title }}</span></label>
-          <div class="flex flex-wrap items-center justify-between gap-2">
-            <div class="flex flex-wrap items-center gap-1" aria-label="Formatação Markdown">
-              <AppButton variant="secondary" type="button" title="Título" @click="prefixLines('## ')"><Heading2 :size="16" /></AppButton><AppButton variant="secondary" type="button" title="Negrito" @click="replaceSelection('**')"><Bold :size="16" /></AppButton><AppButton variant="secondary" type="button" title="Itálico" @click="replaceSelection('*')"><Italic :size="16" /></AppButton><AppButton variant="secondary" type="button" title="Sublinhado" @click="replaceSelection('++')"><Underline :size="16" /></AppButton><AppButton variant="secondary" type="button" title="Tachado" @click="replaceSelection('~~')"><Strikethrough :size="16" /></AppButton><AppButton variant="secondary" type="button" title="Lista" @click="prefixLines('- ')"><List :size="16" /></AppButton><AppButton variant="secondary" type="button" title="Lista numerada" @click="prefixLines('1. ')"><ListOrdered :size="16" /></AppButton><AppButton variant="secondary" type="button" title="Citação" @click="prefixLines('> ')"><Quote :size="16" /></AppButton>
-              <select v-model="codeLanguage" class="min-h-10 rounded-md border border-border bg-canvas px-2 text-xs" aria-label="Linguagem do bloco de código"><option value="text">Texto</option><option value="bash">Bash</option><option value="javascript">JavaScript</option><option value="typescript">TypeScript</option><option value="json">JSON</option><option value="html">HTML</option><option value="css">CSS</option><option value="vue">Vue</option><option value="sql">SQL</option><option value="yaml">YAML</option><option value="dockerfile">Dockerfile</option><option value="nginx">Nginx</option></select>
-              <AppButton variant="secondary" type="button" title="Inserir bloco de código" @click="insertCodeBlock"><Code2 :size="16" /></AppButton><AppButton variant="secondary" type="button" title="Link" @click="insertLink"><Link2 :size="16" /></AppButton><AppButton variant="secondary" type="button" title="Separador" @click="prefixLines('---\n')"><Minus :size="16" /></AppButton>
-            </div>
+        <div class="shrink-0 border-b border-border bg-surface px-5 py-3 sm:px-6">
+          <div class="flex flex-wrap items-center gap-2">
+            <input v-model="editor.title" class="min-h-10 min-w-52 flex-1 rounded-md border border-border bg-canvas px-3 py-2" :aria-invalid="Boolean(fieldErrors.title)" aria-label="Título da nota" maxlength="160" placeholder="Título da nota (opcional)">
+            <AppButton v-if="hasEditorSelection" class="lg:hidden" variant="secondary" type="button" title="Formatar texto selecionado" @click="openFormattingFallback"><Type :size="16" />Formatar</AppButton>
             <div class="hidden gap-1 rounded-md border border-border bg-canvas p-1 lg:flex"><button type="button" class="rounded px-3 py-1.5 text-xs" :class="desktopMode === 'write' ? 'bg-elevated text-foreground' : 'text-muted'" @click="desktopMode = 'write'">Editor</button><button type="button" class="rounded px-3 py-1.5 text-xs" :class="desktopMode === 'split' ? 'bg-elevated text-foreground' : 'text-muted'" @click="desktopMode = 'split'">Dividido</button><button type="button" class="rounded px-3 py-1.5 text-xs" :class="desktopMode === 'preview' ? 'bg-elevated text-foreground' : 'text-muted'" @click="desktopMode = 'preview'">Preview</button></div>
             <div class="flex gap-1 rounded-md border border-border bg-canvas p-1 lg:hidden"><button type="button" class="rounded px-3 py-1.5 text-xs" :class="editorTab === 'write' ? 'bg-elevated text-foreground' : 'text-muted'" @click="editorTab = 'write'">Escrever</button><button type="button" class="rounded px-3 py-1.5 text-xs" :class="editorTab === 'preview' ? 'bg-elevated text-foreground' : 'text-muted'" @click="editorTab = 'preview'">Visualizar</button></div>
           </div>
+          <span v-if="fieldErrors.title" class="mt-1 block text-xs text-red-500">{{ fieldErrors.title }}</span>
+          <p class="mt-1 text-xs text-muted">Selecione um texto e use o botão direito do mouse para formatar rapidamente.</p>
         </div>
-        <div class="min-h-0 flex-1 bg-canvas/40 p-3 sm:p-4"><div class="grid h-full min-h-0 gap-3" :class="desktopMode === 'split' ? 'lg:grid-cols-2' : 'lg:grid-cols-1'"><div class="min-h-0" :class="[(editorTab === 'write' ? 'block' : 'hidden'), desktopMode === 'preview' ? 'lg:hidden' : 'lg:block']"><MarkdownEditor ref="markdownEditor" v-model="editor.content" aria-label="Conteúdo da nota em Markdown" @save="save" /></div><div class="min-h-0 overflow-y-auto rounded-lg border border-border bg-canvas p-5 sm:p-7" :class="[(editorTab === 'preview' ? 'block' : 'hidden'), desktopMode === 'write' ? 'lg:hidden' : 'lg:block']"><MarkdownViewer :content="editor.content" /></div></div></div>
+        <div class="min-h-0 flex-1 bg-canvas/40 p-3 sm:p-4"><div class="grid h-full min-h-0 gap-3" :class="desktopMode === 'split' ? 'lg:grid-cols-2' : 'lg:grid-cols-1'"><div class="min-h-0" :class="[(editorTab === 'write' ? 'block' : 'hidden'), desktopMode === 'preview' ? 'lg:hidden' : 'lg:block']"><MarkdownEditor ref="markdownEditor" v-model="editor.content" aria-label="Conteúdo da nota em Markdown" @save="save" @contextmenu="openEditorContextMenu" @selection-change="onSelectionChange" /></div><div class="min-h-0 overflow-y-auto rounded-lg border border-border bg-canvas p-5 sm:p-7" :class="[(editorTab === 'preview' ? 'block' : 'hidden'), desktopMode === 'write' ? 'lg:hidden' : 'lg:block']"><MarkdownViewer :content="editor.content" /></div></div></div>
         <p v-if="fieldErrors.content" class="shrink-0 px-5 pb-2 text-xs text-red-500">{{ fieldErrors.content }}</p><p v-if="error" class="mx-5 mb-3 shrink-0 rounded-md border border-red-500/40 bg-red-500/10 p-3 text-sm text-red-500" role="alert">{{ error }}</p>
       </form>
     </AppModal>
+
+    <MarkdownContextMenu v-if="contextMenu" :x="contextMenu.x" :y="contextMenu.y" @action="applyFormatting" @close="contextMenu = null" />
   </AppShell>
 </template>
