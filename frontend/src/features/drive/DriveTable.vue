@@ -178,7 +178,10 @@ function onFolderDrop(event, item) {
           @drop.prevent="onFolderDrop($event, item)"
         >
           <td class="border-b border-border/80 px-3 py-2.5">
-            <label class="grid size-7 place-items-center rounded group-hover:bg-border/60">
+            <label
+              class="grid size-7 place-items-center rounded group-hover:bg-border/60"
+              @click.stop
+            >
               <span class="sr-only">Selecionar {{ item.name }}</span>
               <input
                 type="checkbox"
