@@ -7,7 +7,7 @@ on:
       - master
 
 permissions:
-  contents: write
+  contents: read
   statuses: write
 
 jobs:
@@ -62,14 +62,3 @@ jobs:
                 ? 'Lint, tests and build passed.'
                 : 'Lint, tests or build failed.'
             });
-      - name: Remove non-master branches
-        if: github.event_name == 'push' && github.ref == 'refs/heads/master' && steps.validate.outcome == 'success'
-        shell: bash
-        run: |
-          git ls-remote --heads origin \
-            | awk '{ sub("refs/heads/", "", $2); print $2 }' \
-            | while IFS= read -r branch; do
-                if [ "$branch" != "master" ]; then
-                  git push origin --delete "$branch"
-                fi
-              done
