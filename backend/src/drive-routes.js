@@ -1,6 +1,7 @@
 export function registerDriveRoutes(
   app,
   {
+    driveItemsService,
     driveSettingsService,
     fileService,
     folderService,
@@ -36,6 +37,57 @@ export function registerDriveRoutes(
           pendingBytes: fileService.pendingBytes()
         });
         response.json({ settings, status: driveSettingsService.status() });
+      } catch (error) {
+        next(error);
+      }
+    }
+  );
+
+  app.get('/api/drive/items', requireAuth, (request, response, next) => {
+    try {
+      response.json(
+        driveItemsService.list({
+          folderId: request.query.folderId,
+          query: request.query.q,
+          scope: request.query.scope,
+          sort: request.query.sort,
+          order: request.query.order,
+          from: request.query.from,
+          to: request.query.to,
+          minSize: request.query.minSize,
+          maxSize: request.query.maxSize,
+          type: request.query.type,
+          limit: request.query.limit,
+          offset: request.query.offset
+        })
+      );
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  app.post(
+    '/api/drive/items/move',
+    requireAuth,
+    requireSameOrigin,
+    requireCsrf,
+    (request, response, next) => {
+      try {
+        response.json(driveItemsService.move(request.body ?? {}));
+      } catch (error) {
+        next(error);
+      }
+    }
+  );
+
+  app.post(
+    '/api/drive/items/delete',
+    requireAuth,
+    requireSameOrigin,
+    requireCsrf,
+    async (request, response, next) => {
+      try {
+        response.json(await driveItemsService.remove(request.body ?? {}));
       } catch (error) {
         next(error);
       }
