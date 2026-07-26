@@ -17,7 +17,8 @@ const database = openDatabase(config.databasePath);
 const driveSettingsService = new DriveSettingsService(database, {
   filesDir: config.filesDir,
   defaultReservedBytes: config.driveReservedBytes,
-  defaultMaxUploadBytes: config.maxUploadBytes
+  defaultMaxUploadBytes: config.maxUploadBytes,
+  uploadHardLimitBytes: config.driveUploadHardLimitBytes
 });
 const folderService = new FolderService(database);
 const systemMetricsService = new SystemMetricsService({
