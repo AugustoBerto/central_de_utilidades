@@ -29,7 +29,10 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKeydown));
     <div v-if="state.open" class="fixed inset-0 z-[100] grid place-items-center bg-black/70 p-4 backdrop-blur-sm" role="presentation">
       <section class="w-full max-w-md rounded-xl border border-border bg-surface p-5 shadow-2xl" role="alertdialog" aria-modal="true" :aria-label="state.title">
         <div class="flex gap-4">
-          <span class="mt-0.5 rounded-lg border border-border bg-elevated p-2" :class="state.variant === 'danger' ? 'text-red-500' : 'text-accent'">
+          <span
+            class="mt-0.5 flex size-12 shrink-0 self-start items-center justify-center rounded-lg border border-border bg-elevated"
+            :class="state.variant === 'danger' ? 'text-red-500' : 'text-accent'"
+          >
             <AlertTriangle :size="22" aria-hidden="true" />
           </span>
           <div class="min-w-0 flex-1">
