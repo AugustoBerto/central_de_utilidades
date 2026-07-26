@@ -24,7 +24,9 @@ function validateId(id) {
 }
 
 function validateParentId(parentId) {
-  return parentId === null || parentId === undefined ? null : validateId(parentId);
+  return parentId === null || parentId === undefined || parentId === ''
+    ? null
+    : validateId(parentId);
 }
 
 function validateName(name) {
@@ -63,6 +65,7 @@ export class FolderService {
 
   list(parentId = null) {
     const normalizedParentId = validateParentId(parentId);
+    this.assertParentExists(normalizedParentId);
     const rows = normalizedParentId === null
       ? this.database
           .prepare(
@@ -164,27 +167,40 @@ export class FolderService {
       );
   }
 
-  assertNameAvailable(name, parentId, excludedId = null) {
-    const duplicate = parentId === null
+  assertNameAvailable(name, parentId, excludedFolderId = null) {
+    const duplicateFolder = parentId === null
       ? this.database
           .prepare(
             `SELECT id FROM folders
              WHERE parent_id IS NULL AND name = ? COLLATE NOCASE
                AND (? IS NULL OR id <> ?)`
           )
-          .get(name, excludedId, excludedId)
+          .get(name, excludedFolderId, excludedFolderId)
       : this.database
           .prepare(
             `SELECT id FROM folders
              WHERE parent_id = ? AND name = ? COLLATE NOCASE
                AND (? IS NULL OR id <> ?)`
           )
-          .get(parentId, name, excludedId, excludedId);
-    if (duplicate)
+          .get(parentId, name, excludedFolderId, excludedFolderId);
+    const duplicateFile = parentId === null
+      ? this.database
+          .prepare(
+            `SELECT id FROM files
+             WHERE folder_id IS NULL AND original_name = ? COLLATE NOCASE`
+          )
+          .get(name)
+      : this.database
+          .prepare(
+            `SELECT id FROM files
+             WHERE folder_id = ? AND original_name = ? COLLATE NOCASE`
+          )
+          .get(parentId, name);
+    if (duplicateFolder || duplicateFile)
       throw new HttpError(
         409,
         'FOLDER_NAME_CONFLICT',
-        'Já existe uma pasta com este nome neste local.',
+        'Já existe um item com este nome neste local.',
         { name: 'Escolha outro nome para a pasta.' }
       );
   }
