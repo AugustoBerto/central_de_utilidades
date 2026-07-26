@@ -47,7 +47,7 @@ function createRateLimiter({ limit = 8, windowMs = 60_000 } = {}) {
 export function createApp({
   authService,
   automationService,
-  config,
+  config = {},
   fileService,
   noteService,
   shortcutService,
