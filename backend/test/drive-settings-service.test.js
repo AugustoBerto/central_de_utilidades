@@ -9,7 +9,12 @@ import { DriveSettingsService } from '../src/drive-settings-service.js';
 
 const resources = [];
 
-function setup({ usedBytes = 0, reservedBytes = 1_000, maxUploadBytes = 100 } = {}) {
+function setup({
+  usedBytes = 0,
+  reservedBytes = 1_000,
+  maxUploadBytes = 100,
+  uploadHardLimitBytes = 10_000
+} = {}) {
   const directory = mkdtempSync(join(tmpdir(), 'painel-drive-settings-'));
   const filesDir = join(directory, 'files');
   const database = openDatabase(join(directory, 'app.sqlite'));
@@ -26,7 +31,8 @@ function setup({ usedBytes = 0, reservedBytes = 1_000, maxUploadBytes = 100 } = 
   const service = new DriveSettingsService(database, {
     filesDir,
     defaultReservedBytes: reservedBytes,
-    defaultMaxUploadBytes: maxUploadBytes
+    defaultMaxUploadBytes: maxUploadBytes,
+    uploadHardLimitBytes
   });
   return { database, service };
 }
@@ -51,31 +57,25 @@ describe('DriveSettingsService', () => {
   it('inicializa a configuração e separa cota lógica do espaço físico', () => {
     const { service } = setup({ usedBytes: 250 });
     const status = service.status();
-
     expect(status).toMatchObject({
       reservedBytes: 1_000,
       maxUploadBytes: 100,
+      uploadHardLimitBytes: 10_000,
       usedBytes: 250,
       quotaFreeBytes: 750,
       usedPercent: 25
     });
     expect(status.physicalFreeBytes).toBeGreaterThan(0);
-    expect(status.effectiveFreeBytes).toBe(
-      Math.min(status.quotaFreeBytes, status.physicalFreeBytes)
-    );
+    expect(status.effectiveFreeBytes).toBe(Math.min(status.quotaFreeBytes, status.physicalFreeBytes));
   });
 
   it('preserva instalações cujo uso já supera a cota padrão', () => {
     const { service } = setup({ usedBytes: 1_200 });
-    expect(service.get()).toMatchObject({
-      reservedBytes: 1_200,
-      maxUploadBytes: 100
-    });
+    expect(service.get()).toMatchObject({ reservedBytes: 1_200, maxUploadBytes: 100 });
   });
 
   it('valida alterações de cota, uploads pendentes e limite por arquivo', () => {
     const { service } = setup({ usedBytes: 250 });
-
     expect(service.update({ reservedBytes: 800, maxUploadBytes: 200 })).toMatchObject({
       reservedBytes: 800,
       maxUploadBytes: 200
@@ -84,9 +84,7 @@ describe('DriveSettingsService', () => {
       status: 422,
       code: 'DRIVE_QUOTA_BELOW_USAGE'
     });
-    expect(
-      caught(() => service.update({ reservedBytes: 300 }, { pendingBytes: 100 }))
-    ).toMatchObject({
+    expect(caught(() => service.update({ reservedBytes: 300 }, { pendingBytes: 100 }))).toMatchObject({
       status: 422,
       code: 'DRIVE_QUOTA_BELOW_USAGE'
     });
@@ -96,17 +94,23 @@ describe('DriveSettingsService', () => {
     });
   });
 
-  it('recusa uploads acima do limite ou do espaço efetivo disponível', () => {
-    const { service } = setup({ usedBytes: 250, reservedBytes: 300, maxUploadBytes: 100 });
+  it('impede que a preferência ultrapasse o limite da instalação', () => {
+    const { service } = setup({
+      reservedBytes: 2_000,
+      maxUploadBytes: 100,
+      uploadHardLimitBytes: 500
+    });
+    expect(caught(() => service.update({ maxUploadBytes: 501 }))).toMatchObject({
+      status: 422,
+      code: 'MAX_UPLOAD_EXCEEDS_SERVER_LIMIT'
+    });
+    expect(service.status().uploadHardLimitBytes).toBe(500);
+  });
 
-    expect(caught(() => service.assertUploadAllowed(101))).toMatchObject({
-      status: 413,
-      code: 'FILE_TOO_LARGE'
-    });
-    expect(caught(() => service.assertUploadAllowed(51))).toMatchObject({
-      status: 507,
-      code: 'INSUFFICIENT_STORAGE'
-    });
+  it('recusa arquivos acima do limite ou do espaço efetivo disponível', () => {
+    const { service } = setup({ usedBytes: 250, reservedBytes: 300, maxUploadBytes: 100 });
+    expect(caught(() => service.assertUploadAllowed(101))).toMatchObject({ status: 413, code: 'FILE_TOO_LARGE' });
+    expect(caught(() => service.assertUploadAllowed(51))).toMatchObject({ status: 507, code: 'INSUFFICIENT_STORAGE' });
     expect(() => service.assertUploadAllowed(50)).not.toThrow();
   });
 });
